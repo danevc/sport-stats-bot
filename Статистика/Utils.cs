@@ -112,10 +112,82 @@ namespace Stats
             myPlot.Axes.Title.Label.Text = Title;
             myPlot.Axes.Title.Label.ForeColor = Colors.DarkRed;
             myPlot.Axes.Title.Label.FontSize = 32;
-            myPlot.Axes.Title.Label.FontName = Fonts.Serif;
             myPlot.Axes.Title.Label.Bold = true;
 
             return myPlot;
+        }
+
+        public static Plot CreateBarWorkoutPlot(List<WorkoutInfo> workouts, string Title)
+        {
+            var myPlot = new Plot();
+
+            int size = workouts.Count();
+
+            for (int i = 0; i < size; i++)
+            {
+                var bars = new List<Bar>();
+
+                bars.Add(new Bar()
+                {
+                    FillColor = Colors.OrangeRed,
+                    Position = i,
+                    ValueBase = 0,
+                    Value = workouts[i].Koef / 50,
+                    Label = $"{workouts[i].Koef}",
+                    CenterLabel = true,
+                });
+                bars.Add(new Bar()
+                {
+                    FillColor = Colors.AliceBlue,
+                    Position = i,
+                    ValueBase = workouts[i].Koef / 50,
+                    Value = workouts[i].MinuteDifference,
+                    Label = $"{GetHoursByMin(workouts[i].MinuteDifference)}",
+                    CenterLabel = true,
+                });
+                var barPlot = myPlot.Add.Bars(bars);
+                barPlot.Horizontal = false;
+            }
+
+            myPlot.Axes.Margins(bottom: 0);
+
+            var tickPositions = Generate.Consecutive(size);
+            var tickLabels = workouts.Select(x => $"{x.WorkoutDate.ToString("dd MMMM", CultureInfo.CreateSpecificCulture("ru-RU"))}").ToArray();
+            if (size > 8)
+            {
+                myPlot.Axes.Bottom.TickLabelStyle.Rotation = 30;
+                myPlot.Axes.Bottom.TickLabelStyle.Alignment = Alignment.MiddleLeft;
+            }
+
+            var padding = new PixelPadding(30, 30, 70, 100);
+
+            myPlot.Axes.Bottom.SetTicks(tickPositions, tickLabels);
+            myPlot.HideGrid();
+            myPlot.Legend.Orientation = Orientation.Horizontal;
+            myPlot.ShowLegend(Edge.Bottom);
+            myPlot.Layout.Fixed(padding);
+            myPlot.Axes.Title.Label.Text = Title;
+            myPlot.Axes.Title.Label.ForeColor = Colors.DarkRed;
+            myPlot.Axes.Title.Label.FontSize = 32;
+            myPlot.Axes.Title.Label.Bold = true;
+
+            return myPlot;
+        }
+
+        public static string GetHoursByMin(int mins)
+        {
+            string hoursString;
+            int hours = mins / 60;
+            if(hours > 0)
+            {
+                hoursString = $"{hours}ч {mins - hours * 60}мин";
+            }
+            else
+            {
+                hoursString = $"{mins}мин";
+            }
+
+            return hoursString;
         }
 
         public static string GetDescription(Enum value)

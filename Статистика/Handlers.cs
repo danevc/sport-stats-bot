@@ -49,8 +49,8 @@ namespace Stats
                 case State.Stats:
                     _state = await SportApi.Stats(text, botClient, chat, user);
                     break;
-                case State.StatsByExercise:
-                    _state = await SportApi.StatsByExercise(text, botClient, chat, user);
+                case State.StatsByMuscleGroup:
+                    _state = await SportApi.StatsByMuscleGroup(text, botClient, chat, user);
                     break;
                 default:
                     break;

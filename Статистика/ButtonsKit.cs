@@ -146,20 +146,6 @@ namespace Stats
                         });
                     break;
                 case ButtonGroups.StatsByMuscleGroup:
-                    buttons = new List<KeyboardButton[]>()
-                    {
-                        new KeyboardButton[]
-                        {
-                            new KeyboardButton("По упражнениям за всё время"),
-                            new KeyboardButton("По упражнениям за два месяца")
-                        },
-                        new KeyboardButton[]
-                        {
-                            new KeyboardButton(Utils._btn_ToHome)
-                        }
-                    };
-                    break;
-                case ButtonGroups.StatsByExercise:
                     buttons.Clear();
                     var exercisesForStat = Utils.GetExercisesByMuscleGroup(History.GetStatMuscleGroupId());
                     if (exercisesForStat != null)
@@ -175,8 +161,12 @@ namespace Stats
                         }
                     }
                     buttons.Add(new KeyboardButton[]
+                    {
+                            new KeyboardButton("По всем упражнениям"),
+                            new KeyboardButton("По тренировкам"),
+                    });
+                    buttons.Add(new KeyboardButton[]
                         {
-                            new KeyboardButton("По этой группе мышц"),
                             new KeyboardButton(Utils._btn_ToHome)
                         });
                     break;

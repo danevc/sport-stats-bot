@@ -12,6 +12,6 @@
         ChooseDayToWork,
         RealizeExercise,
         Stats,
-        StatsByExercise
+        StatsByMuscleGroup
     }
 }

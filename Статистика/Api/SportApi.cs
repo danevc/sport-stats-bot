@@ -93,17 +93,30 @@ namespace Stats.Api
             if (muscleGroup != null)
             {
                 History.SetStatMuscleGroupId(muscleGroup.MuscleGroupId);
-                var replyKeyboard = ButtonsKit.ChangeButtons(ButtonGroups.StatsByExercise);
+                var replyKeyboard = ButtonsKit.ChangeButtons(ButtonGroups.StatsByMuscleGroup);
                 await botClient.SendTextMessageAsync(chat.Id, "Выбери упражнение.", replyMarkup: replyKeyboard);
-                return State.StatsByExercise;
+                return State.StatsByMuscleGroup;
             }
             return State.Stats;
         }
 
         [Obsolete]
-        public static async Task<State> StatsByExercise(string text, ITelegramBotClient botClient, Chat chat, Models.User user)
+        public static async Task<State> StatsByMuscleGroup(string text, ITelegramBotClient botClient, Chat chat, Models.User user)
         {
-            if(text == "По этой группе мышц")
+            if (text == "По тренировкам")
+            {
+                var workouts = SqlSport.GetWorkoutInfos(user.Id, History.GetStatMuscleGroupId());
+                var plot = Utils.CreateBarWorkoutPlot(workouts, workouts.Select(x => x.MuscleGroupName).First());
+
+                plot.SavePng("По тренировкам.png", 650, 500);
+
+                using (var fileStream = new FileStream("По тренировкам.png", FileMode.Open, FileAccess.Read))
+                {
+                    var message = await botClient.SendPhotoAsync(chat.Id, photo: InputFile.FromStream(fileStream, "По тренировкам.png"));
+                }
+                return State.StatsByMuscleGroup;
+            }
+            else if (text == "По всем упражнениям")
             {
                 var exercises = History.GetSchedule()?.FirstOrDefault(e => e.MuscleGroupId == History.GetStatMuscleGroupId())?.Exercises;
 
@@ -159,7 +172,7 @@ namespace Stats.Api
 
                     var message = await botClient.SendMediaGroup(chat.Id, inputMedia.ToArray());
                 }
-                return State.Stats;
+                return State.StatsByMuscleGroup;
             }
             else
             {
@@ -198,7 +211,7 @@ namespace Stats.Api
                         }
                     }
                 }
-                return State.StatsByExercise;
+                return State.StatsByMuscleGroup;
             }
         }
 

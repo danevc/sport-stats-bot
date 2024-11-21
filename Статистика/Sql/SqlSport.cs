@@ -39,6 +39,56 @@ namespace Stats
                                                                     WHERE u.Id = @Id AND mg.Id = @MuscleGroupId AND WorkoutDate >= DATEADD(month, -2, GETDATE())
                                                                     ORDER BY sa.WorkoutDate, mg.MuscleGroupName, e.ExerciseName, sa.Approach, sa.Weight, sa.NumOfRepetitions;";
 
+        public static readonly string getWorkoutHourLastTwoMonth_sqlquery = @"SELECT DATEDIFF(MINUTE, MIN(sa.WorkoutDate), MAX(sa.WorkoutDate)) AS MinuteDifference,
+                                                                        CAST(sa.WorkoutDate AS DATE) AS Day,
+                                                                        mg.MuscleGroupName,
+                                                                        SUM(sa.Weight + sa.NumOfRepetitions) as Koef
+                                                                        FROM SportAudit as sa
+                                                                        INNER JOIN Exercise as e ON e.Id = sa.ExerciseId
+                                                                        INNER JOIN MuscleGroup as mg ON mg.Id = sa.MuscleGroupId
+                                                                        INNER JOIN UserTelegram as u ON u.Id = sa.UserId
+                                                                        WHERE u.Id = @Id AND sa.WorkoutDate >= DATEADD(month, -2, GETDATE())
+                                                                        AND mg.Id = @MuscleGroupId
+                                                                        GROUP BY CAST(sa.WorkoutDate AS DATE), mg.MuscleGroupName
+                                                                        ORDER BY Day";
+
+        public static List<WorkoutInfo> GetWorkoutInfos(int Id, Guid MuscleGroupId)
+        {
+            var workoutsInfo = new List<WorkoutInfo>();
+
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(conString))
+                {
+                    connection.Open();
+                    var command = new SqlCommand(getWorkoutHourLastTwoMonth_sqlquery, connection);
+
+                    command.Parameters.AddWithValue("@Id", Id);
+                    command.Parameters.AddWithValue("@MuscleGroupId", MuscleGroupId);
+
+                    using (SqlDataReader reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            workoutsInfo.Add(new WorkoutInfo
+                            {
+                                MuscleGroupName = (string)reader[reader.GetOrdinal("MuscleGroupName")],
+                                MinuteDifference = (int)reader[reader.GetOrdinal("MinuteDifference")],
+                                WorkoutDate = (DateTime)reader[reader.GetOrdinal("Day")],
+                                Koef = (int)reader[reader.GetOrdinal("Koef")],
+                            });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка: {ex.Message}");
+            }
+
+            return workoutsInfo;
+        }
+
         public static void AddExercise(Exercise exercise)
         {
             try
