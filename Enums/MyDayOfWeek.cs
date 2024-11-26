@@ -1,13 +1,13 @@
-﻿using System;
-using System.ComponentModel;
-using System.Reflection;
+﻿using System.ComponentModel;
 
-namespace Stats.Enums
+namespace SportStats.Enums
 {
     public enum MyDayOfWeek
     {
+        [Description("Не выбран")]
+        None = 0,
         [Description("Понедельник")]
-        Monday = 1,
+        Monday,
         [Description("Вторник")]
         Tuesday,
         [Description("Среда")]
@@ -20,5 +20,6 @@ namespace Stats.Enums
         Saturday,
         [Description("Воскресенье")]
         Sunday
+        
     }
 }

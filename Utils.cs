@@ -1,13 +1,13 @@
-﻿using Stats.Enums;
-using Stats.Models;
+﻿using SportStats.Enums;
+using SportStats.Models;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using ScottPlot;
 using System.Globalization;
+using System.Text.RegularExpressions;
 
-namespace Stats
+namespace SportStats
 {
     public static class Utils
     {
@@ -18,7 +18,26 @@ namespace Stats
         public static string _btn_ChooseDay = "📆 Выбрать день";
         public static string _btn_AddExercise = "+ Упражнение";
 
-        public static Plot CreateBarPlot(List<DateTime> dates, List<int> FirstPlot, List<int> SecondPlot, string Title = "Без названия")
+        public static string GetStringBetweenQuotes(string text)
+        {
+            int startIndex = text.IndexOf('«');
+            int endIndex = text.LastIndexOf('»');
+            if (startIndex != -1 && endIndex != -1 && startIndex < endIndex)
+            {
+                return text.Substring(startIndex + 1, endIndex - startIndex - 1);
+            }
+            else
+            {
+                throw new Exception("Подстрока не найдена");
+            }
+        }
+
+        public static bool IsAlphabetic(string str)
+        {
+            return Regex.IsMatch(str, "^[a-zA-Zа-яА-ЯёЁ\\s]+$");
+        }
+
+        /**public static Plot CreateBarPlot(List<DateTime> dates, List<int> FirstPlot, List<int> SecondPlot, string Title = "Без названия")
         {
             var myPlot = new Plot();
             var size = dates.Count();
@@ -31,8 +50,8 @@ namespace Stats
 
                 var firstBarNum = hNum;
                 var secondBarNum = hWeight;
-                var colorFirst = Colors.Lime;
-                var colorSecond = Colors.OrangeRed;
+                var colorFirst = Colors.LightBlue;
+                var colorSecond = Colors.Tomato;
                 var firstBarLabel = $"{firstBarNum}";
                 var secondBarLabel = $"{secondBarNum}";
 
@@ -40,13 +59,13 @@ namespace Stats
                 {
                     firstBarNum = hWeight;
                     secondBarNum = hNum;
-                    colorFirst = Colors.OrangeRed;
-                    colorSecond = Colors.Lime;
+                    colorFirst = Colors.Tomato;
+                    colorSecond = Colors.LightBlue;
                     firstBarLabel = $"{firstBarNum}";
                     secondBarLabel = $"{secondBarNum}";
                 }
-                
-                if(hWeight == hNum)
+
+                if (hWeight == hNum)
                 {
                     firstBarLabel = $"{secondBarNum} = {firstBarNum}";
                     secondBarLabel = "";
@@ -92,12 +111,12 @@ namespace Stats
             var item1 = new LegendItem()
             {
                 LabelText = "Вес",
-                FillColor = Colors.OrangeRed
+                FillColor = Colors.Tomato
             };
             var item2 = new LegendItem()
             {
                 LabelText = "Повторений",
-                FillColor = Colors.Lime
+                FillColor = Colors.LightBlue
             };
 
             var padding = new PixelPadding(30, 30, 100, 100);
@@ -129,7 +148,7 @@ namespace Stats
 
                 bars.Add(new Bar()
                 {
-                    FillColor = Colors.OrangeRed,
+                    FillColor = Colors.Tomato,
                     Position = i,
                     ValueBase = 0,
                     Value = workouts[i].Koef / 50,
@@ -138,7 +157,7 @@ namespace Stats
                 });
                 bars.Add(new Bar()
                 {
-                    FillColor = Colors.AliceBlue,
+                    FillColor = Colors.LightBlue,
                     Position = i,
                     ValueBase = workouts[i].Koef / 50,
                     Value = workouts[i].MinuteDifference,
@@ -159,8 +178,21 @@ namespace Stats
                 myPlot.Axes.Bottom.TickLabelStyle.Alignment = Alignment.MiddleLeft;
             }
 
-            var padding = new PixelPadding(30, 30, 70, 100);
+            var item1 = new LegendItem()
+            {
+                LabelText = "Длительность тренировки",
+                FillColor = Colors.LightBlue
+            };
+            var item2 = new LegendItem()
+            {
+                LabelText = "Эффективность",
+                FillColor = Colors.Tomato
+            };
 
+            var padding = new PixelPadding(30, 30, 100, 100);
+
+            myPlot.Legend.ManualItems.Add(item1);
+            myPlot.Legend.ManualItems.Add(item2);
             myPlot.Axes.Bottom.SetTicks(tickPositions, tickLabels);
             myPlot.HideGrid();
             myPlot.Legend.Orientation = Orientation.Horizontal;
@@ -178,7 +210,7 @@ namespace Stats
         {
             string hoursString;
             int hours = mins / 60;
-            if(hours > 0)
+            if (hours > 0)
             {
                 hoursString = $"{hours}ч {mins - hours * 60}мин";
             }
@@ -214,7 +246,7 @@ namespace Stats
             }
         }
 
-        public static List<Exercise> GetExercisesToday() 
+        public static List<Exercise> GetExercisesToday()
         {
             return History.GetSchedule().FirstOrDefault(e => (int)e.DayOfWeek == History.GetDay())?.Exercises;
         }
@@ -227,8 +259,8 @@ namespace Stats
         public static string GetWorkoutStringResponse(int approach, ExercisesReport lastExercise)
         {
             var _response = $"Упражнение: <b>{History.GetCurrentExercise()?.ExerciseName}</b>\nПодход: <b>#{approach}</b>\nПрошлое занятие: ";
-            
-            if(lastExercise?.Weight != 0 && lastExercise?.NumOfRepetitions != null)
+
+            if (lastExercise?.Weight != 0 && lastExercise?.NumOfRepetitions != null)
             {
                 _response += $"<b>{lastExercise.Weight}кг</b> на <b>{lastExercise.NumOfRepetitions}</b> повторен{EndingDependsOfNum(lastExercise.NumOfRepetitions)}.";
             }
@@ -240,7 +272,7 @@ namespace Stats
             {
                 _response += $"-";
             }
-            
+
             return _response;
         }
 
@@ -250,7 +282,7 @@ namespace Stats
 
             int numEnd = num % 10;
 
-            if(numEnd == 0 || numEnd >= 5 || num % 100 >= 10 && num % 100 <= 20)
+            if (numEnd == 0 || numEnd >= 5 || num % 100 >= 10 && num % 100 <= 20)
             {
                 end = "ий";
             }
@@ -258,7 +290,7 @@ namespace Stats
             {
                 end = "иe";
             }
-            else if(numEnd > 1 && numEnd < 5)
+            else if (numEnd > 1 && numEnd < 5)
             {
                 end = "ия";
             }
@@ -311,6 +343,6 @@ namespace Stats
                 return (-1, -1);
             }
 
-        }
+        }*/
     }
 }

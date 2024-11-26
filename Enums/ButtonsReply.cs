@@ -1,6 +1,6 @@
-﻿namespace Stats.Enums
+﻿namespace SportStats.Enums
 {
-    public enum ButtonGroups
+    public enum ButtonsReply
     {
         ChooseDayOfWeek,
         AddSchedule,
@@ -10,6 +10,7 @@
         AddingExercises,
         Stats,
         StatsByMuscleGroup,
-        StatsByExercise
+        StatsByExercise,
+        None
     }
 }
