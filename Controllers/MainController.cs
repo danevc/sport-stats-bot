@@ -2,10 +2,7 @@
 using SportStats.Enums;
 using SportStats.Interfaces;
 using SportStats.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.RegularExpressions;
+using System.Globalization;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -15,63 +12,23 @@ namespace SportStats.Controllers
 {
     public class MainController : BaseController, IMain 
     {
-        public MainController(Models.User user, ITelegramBotClient bot, Chat chat, IMemoryCache cache) : base(user, bot, chat, cache)
-        {
-
-        }
+        public MainController(Models.User user, ITelegramBotClient bot, Chat chat, IMemoryCache cache, Service service) : base(user, bot, chat, cache, service) { }
 
         public async void Start(string text)
         {
             try
             {
-                using (var db = new SportContext())
-                {
-                    if (db.Exercises.Any(e => e.UserId == _user.UserId))
-                    {
-                        var replyKeyboard = ButtonsKit.GetBtnsReply(ButtonsReply.None);
-                        await _bot.SendMessage(_chat.Id, "<b>Привет!</b>✌",
-                            replyMarkup: replyKeyboard,
-                            parseMode: ParseMode.Html);
-                        UserStateManager.SetState(_user.UserId, State.None);
-                    }
-                    else
-                    {
-                        var replyKeyboard = ButtonsKit.GetBtnsReply(ButtonsReply.None);
-                        await _bot.SendMessage(_chat.Id, "<b>Привет!</b>✌\nДля работы с ботом необходимо <b>добавить упражнения</b>",
-                            replyMarkup: new InlineKeyboardMarkup().AddButton("Добавить", "AddExercises"),
-                            parseMode: ParseMode.Html);
-                        UserStateManager.SetState(_user.UserId, State.Start);
-                    }
-                }
-
-                if (text == Utils._btn_Workout)
-                {
-                    using (var db = new SportContext())
-                    {
-                        await _bot.SendMessage(_chat.Id, "Группа мышц",
-                            replyMarkup: ButtonsKit.GetBtnsInline(ButtonsInline.Workout, _user.UserId));
-                        UserStateManager.SetState(_user.UserId, State.Workout);
-                    }
-                }
-                else if (text == Utils._btn_Stats)
-                {
-                    await _bot.SendMessage(_chat.Id, "<b>Выбери ...</b>",
-                        replyMarkup: new InlineKeyboardMarkup().AddButton("Закончить", "StopAddExercises"),
-                        parseMode: ParseMode.Html);
-                    UserStateManager.SetState(_user.UserId, State.Stats);
-                }
-                else
-                {
-                    
-                }
+                var message = "<b>Привет!</b>✌";
+                var keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Start, _user.UserId);
+                await _bot.SendMessage(_chat.Id, message, replyMarkup: keyboard, parseMode: ParseMode.Html);
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
             }
             catch (Exception ex)
             {
-                UserStateManager.SetState(_user.UserId, State.None);
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
                 Console.WriteLine(ex.Message);
             }
         }
-
 
         public async void AddExercise(string text)
         {
@@ -81,44 +38,34 @@ namespace SportStats.Controllers
                 {
                     using (var db = new SportContext())
                     {
-                        if (db.Exercises.Any(e => e.UserId == _user.UserId && e.ExerciseName == text))
+                        var result = _service.EditOrCreateExercise(new Exercise
                         {
-                            var replyKeyboard = ButtonsKit.GetBtnsReply(ButtonsReply.None);
-                            await _bot.SendMessage(_chat.Id, "Такое упражнение уже есть, напиши другое",
-                                replyMarkup: replyKeyboard);
-                        }
-                        else
+                            ExerciseId = Guid.NewGuid(),
+                            ExerciseName = text.Trim(),
+                            UserId = _user.UserId
+                        });
+
+                        var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).OrderBy(e => e.CreatedOn).Select(e => e.ExerciseName).ToList();
+                        var message = "Твои упражнения:\n\n";
+
+                        for (var i = 0; i < exercises.Count(); i++)
                         {
-                            db.Exercises.Add(new Exercise
-                            {
-                                ExerciseId = Guid.NewGuid(),
-                                CreatedOn = DateTime.Now,
-                                UserId = _user.UserId,
-                                ExerciseName = text.Trim()
-                            });
-                            db.SaveChanges();
-                            var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).OrderBy(e => e.CreatedOn).Select(e => e.ExerciseName).ToList();
-                            var message = "Твои упражнения:\n\n";
-
-                            for (var i = 0; i < exercises.Count(); i++)
-                            {
-                                message += $"<b>{i + 1}.</b> {exercises[i]}\n";
-                            }
-
-                            message += "\n<b>Напиши следующее</b>";
-
-                            await _bot.SendMessage(_chat.Id, message,
-                                replyMarkup: new InlineKeyboardMarkup()
-                                .AddButton("Удалить", "DeleteExercise")
-                                .AddButton("Закончить", "StopAddExercises"),
-                                parseMode: ParseMode.Html);
+                            message += $"<b>{i + 1}.</b> {exercises[i]}\n";
                         }
+
+                        message += "\n<b>Напиши следующее</b>";
+
+                        await _bot.SendMessage(_chat.Id, message,
+                            replyMarkup: new InlineKeyboardMarkup()
+                            .AddButton("Удалить", "DeleteExercise")
+                            .AddButton("Закончить", "Main"),
+                            parseMode: ParseMode.Html);
                     }
                 }
             }
             catch (Exception ex)
             {
-                UserStateManager.SetState(_user.UserId, State.None);
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
                 Console.WriteLine(ex.Message);
             }
         }
@@ -134,40 +81,32 @@ namespace SportStats.Controllers
                         if (db.Schedules.Any(e => e.UserId == _user.UserId && e.ScheduleName == text))
                         {
                             await _bot.SendMessage(_chat.Id, "Такое расписание уже есть, напиши другое название",
-                                replyMarkup: new InlineKeyboardMarkup()
-                                        .AddButton("Отменить создание расписания", "StopCreateSchedule"));
+                                replyMarkup: new InlineKeyboardMarkup() 
+                                .AddButton("Отменить создание расписания", "Main"));
+                            return;
                         }
-                        else
+
+                        var schedule = new Schedule
                         {
-                            var schedule = new Schedule
-                            {
-                                ScheduleId = Guid.NewGuid(),
-                                CreatedOn = DateTime.Now,
-                                ScheduleName = text,
-                                UserId = _user.UserId,
-                                TrainingDays = new List<TrainingDay>()
-                            };
+                            ScheduleId = Guid.NewGuid(),
+                            ScheduleName = text,
+                            UserId = _user.UserId,
+                            TrainingDays = new List<TrainingDay>()
+                        };
 
-                            db.Schedules.Add(schedule);
-                            db.SaveChanges();
+                        CacheHelper.SetCreateSchedule(_cache, _user.UserId, schedule);
 
-                            _cache.Set($"{_user.UserId}CreateSchedule", schedule);
-
-                            await _bot.SendMessage(_chat.Id, "Отлично, теперь напиши название тренировочного дня.\nНапример, «День 1», «День 2»... или по группе мышц «Спина», «Грудь»...\nДалее в эти группы будут добавлены упражнения",
-                                replyMarkup: new InlineKeyboardMarkup()
-                                        .AddButton("Отменить создание расписания", "StopCreateSchedule"));
-                            UserStateManager.SetState(_user.UserId, State.AddTrainDay);
-                        }
+                        await _bot.SendMessage(_chat.Id,
+                            "Отлично, теперь напиши название тренировочного дня.\nНапример, «День 1», «День 2»... или по группе мышц «Спина», «Грудь»...\nДалее в эти группы будут добавлены упражнения",
+                            replyMarkup: new InlineKeyboardMarkup()
+                            .AddButton("Отменить создание расписания", "Main"));
+                        UserStateManager.SetState(_user.UserId, State.AddTrainDay, _cache);
                     }
-                }
-                else
-                {
-                    await _bot.SendMessage(_chat.Id, "В названии допускаются только символы алфавита");
                 }
             }
             catch (Exception ex)
             {
-                UserStateManager.SetState(_user.UserId, State.None);
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
                 Console.WriteLine(ex.Message);
             }
         }
@@ -178,43 +117,50 @@ namespace SportStats.Controllers
             {
                 if (!string.IsNullOrEmpty(text))
                 {
-                    if (_cache.TryGetValue($"{_user.UserId}CreateSchedule", out Schedule schedule))
+                    if (_cache.TryGetValue($"{_user.UserId}CreateSchedule", out Schedule? schedule))
                     {
-                        if (schedule == null)
-                            throw new Exception("schedule == null");
+                        if (schedule == null) throw new Exception("schedule == null");
+
+                        var previousTrDay = CacheHelper.GetCreateTrainingDay(_cache, _user.UserId);
+
+                        var sequenceNum = previousTrDay != null ? previousTrDay.SequenceNumber + 1 : 1;
 
                         var trainingDay = new TrainingDay
                         {
                             TrainingDayId = Guid.NewGuid(),
-                            CreatedOn = DateTime.Now,
                             ScheduleId = schedule.ScheduleId,
-                            TrainingDayName = text.Trim()
+                            TrainingDayName = text.Trim(),
+                            SequenceNumber = sequenceNum
                         };
 
-                        using(var db = new SportContext())
+                        CacheHelper.SetCreateTrainingDay(_cache, _user.UserId, trainingDay);
+                        if(sequenceNum == 1)
                         {
-                            var scheduleInDb = db.Schedules.FirstOrDefault(e => e.ScheduleId == schedule.ScheduleId);
-                            scheduleInDb.TrainingDays.Add(trainingDay);
-                            db.SaveChanges();
+                            var message = $"Напиши дату, когда будет/был тренировочный день <b>«{trainingDay.TrainingDayName}»</b>\nПример: 24.03.2024";
+                            await _bot.SendMessage(_chat.Id,
+                                message,
+                                parseMode: ParseMode.Html);
+                            UserStateManager.SetState(_user.UserId, State.WriteDateSequenceTrainingDay, _cache);
+                            return;
                         }
 
-                        _cache.Set($"{_user.UserId}CreateTrainingDay", trainingDay);
-                        
+
                         using (var db = new SportContext())
                         {
-                            var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).OrderBy(e => e.CreatedOn).Select(e => e.ExerciseName).ToList();
-                            var message = $"Теперь добавь упражнения для тренировочного дня <b>«{text}»</b>\n\n";
+                            var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).ToList();
 
-                            for (var i = 0; i < exercises.Count(); i++)
-                            {
-                                message += $"<b>{i + 1}.</b> {exercises[i]}\n";
-                            }
-                            message += $"\n<b>Напиши номера через запятую</b>";
-                            await _bot.SendMessage(_chat.Id, message,
+                            if (exercises == null) return;
+
+                            var message = $"Теперь добавь упражнения для тренировочного дня <b>«{trainingDay.TrainingDayName}»</b>\n\n";
+                            message += Utils.GetStringExercises(exercises);
+                            message += $"\n<b>Напиши номера через запятую. Если в списке нет нужного, то добавь новое упражнения начиная со *</b>";
+
+                            await _bot.SendMessage(_chat.Id, 
+                                message,
                                 replyMarkup: new InlineKeyboardMarkup()
-                                        .AddButton("Отменить создание расписания", "StopCreateSchedule"),
+                                .AddButton("Отменить создание расписания", "Main"),
                                 parseMode: ParseMode.Html);
-                            UserStateManager.SetState(_user.UserId, State.AddExerciseToTrainDay);
+                            UserStateManager.SetState(_user.UserId, State.AddExerciseToTrainDay, _cache);
                         }
                     }
                     else
@@ -225,7 +171,7 @@ namespace SportStats.Controllers
             }
             catch (Exception ex)
             {
-                UserStateManager.SetState(_user.UserId, State.None);
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
                 Console.WriteLine(ex.Message);
             }
         }
@@ -236,74 +182,82 @@ namespace SportStats.Controllers
             {
                 if (!string.IsNullOrEmpty(text))
                 {
-                    if (_cache.TryGetValue($"{_user.UserId}CreateSchedule", out Schedule schedule))
+                    var schedule = CacheHelper.GetCreateSchedule(_cache, _user.UserId);
+
+                    if (schedule == null)
+                        throw new Exception("schedule == null");
+
+                    var trainingDay = CacheHelper.GetCreateTrainingDay(_cache, _user.UserId);
+
+                    if (trainingDay == null)
+                        throw new Exception("trainingDay == null");
+
+                    var message = "";
+                    using (var db = new SportContext())
                     {
-                        if (schedule == null)
-                            throw new Exception("schedule == null");
-
-                        if (_cache.TryGetValue($"{_user.UserId}CreateTrainingDay", out TrainingDay trainingDay))
+                        if (text[0] == '*')
                         {
-                            if(trainingDay == null)
-                                throw new Exception("trainingDay == null");
-
-                            using (var db = new SportContext())
+                            text = text.Substring(1).Trim();
+                            var exercise = new Exercise
                             {
-                                var splitText = text.Replace(" ", "").Split(',');
-                                var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).OrderBy(e => e.CreatedOn).ToList();
+                                ExerciseId = Guid.NewGuid(),
+                                ExerciseName = text,
+                                UserId = _user.UserId
+                            };
 
-                                if (exercises == null)
-                                    throw new Exception("exercises == null");
+                            trainingDay.Exercises.Add(exercise);
 
-                                for (int i = 0; i < splitText.Length; i++)
+                            message = $"Упражнение {exercise.ExerciseName} добавлено";
+                        }
+                        else
+                        {
+                            var splitText = text.Replace(" ", "").Split(',');
+                            var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).OrderBy(e => e.CreatedOn).ToList();
+
+                            if (exercises is null)  throw new Exception("AddExercisesToTrainDay || exercises == null");
+
+                            for (int i = 0; i < splitText.Length; i++)
+                            {
+                                if (int.TryParse(splitText[i], out var num))
                                 {
-                                    if(int.TryParse(splitText[i], out var num))
+                                    if (num - 1 <= exercises.Count)
                                     {
-                                        if(num - 1 <= exercises.Count())
-                                        {
-                                            var trainingDayInDb = db.TrainingDays.FirstOrDefault(e => e.TrainingDayId == trainingDay.TrainingDayId);
-                                            trainingDay.Exercises.Add(new ExerciseTrainingDay
-                                            {
-                                                TrainingDay = trainingDay,
-                                                ExerciseId = exercises[num - 1].ExerciseId,
-                                                TrainingDayId = trainingDay.TrainingDayId,
-                                                Exercise = exercises[num - 1]
-                                            });
-                                            db.SaveChanges();
-                                        }
-                                    }
-                                    else
-                                    {
-                                        await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
-                                        return;
+                                        trainingDay.Exercises.Add(exercises[num - 1]);
                                     }
                                 }
-
-                                if(!trainingDay.Exercises.Any())
+                                else
                                 {
                                     await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
                                     return;
                                 }
-
-                                _cache.Set($"{_user.UserId}CreateTrainingDay", trainingDay);
-                                await _bot.SendMessage(_chat.Id,
-                                   "Отлично! Теперь напиши количество полных дней отдыха после этого дня");
-                                UserStateManager.SetState(_user.UserId, State.AddDayRest);
                             }
-                        }
-                        else
-                        {
-                            throw new Exception("Тренировочный день не найдено в кэше");
+
+                            if (!trainingDay.Exercises.Any())
+                            {
+                                await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
+                                return;
+                            }
+
+                            message = "Упражнения добавлены";
                         }
                     }
-                    else
-                    {
-                        throw new Exception("Расписание не найдено в кэше");
-                    }
+
+                    message += "\nЕсли в списке нет нужного, то добавь новое упражнения начиная со *";
+
+                    _cache.Set($"{_user.UserId}CreateTrainingDay", trainingDay);
+                    await _bot.SendMessage(_chat.Id,
+                        message,
+                        replyMarkup: new InlineKeyboardMarkup()
+                            .AddButton("Далее", "NextToAddDayRest")
+                            .AddNewRow()
+                            .AddButton("Отменить создание расписания", "Main"));
+                    UserStateManager.SetState(_user.UserId, State.AddExerciseToTrainDay, _cache);
+
                 }
             }
             catch (Exception ex)
             {
-                UserStateManager.SetState(_user.UserId, State.None);
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
                 Console.WriteLine(ex.Message);
             }
         }
@@ -314,52 +268,35 @@ namespace SportStats.Controllers
             {
                 if (!string.IsNullOrEmpty(text) && int.TryParse(text, out int result))
                 {
-                    if(result >= 0)
+                    if (result >= 0)
                     {
-                        if (_cache.TryGetValue($"{_user.UserId}CreateSchedule", out Schedule schedule))
-                        {
-                            if (schedule == null)
-                                throw new Exception("schedule == null");
+                        var schedule = CacheHelper.GetCreateSchedule(_cache, _user.UserId);
 
-                            if (_cache.TryGetValue($"{_user.UserId}CreateTrainingDay", out TrainingDay trainingDay))
-                            {
-                                if (trainingDay == null)
-                                    throw new Exception("trainingDay == null");
+                        if (schedule is null)
+                            throw new Exception("schedule == null");
 
-                                trainingDay.RestDaysAfter = result;
-                                schedule.TrainingDays.Add(trainingDay);
-                                _cache.Set($"{_user.UserId}CreateSchedule", schedule);
-                                _cache.Remove($"{_user.UserId}CreateTrainingDay");
+                        var trainingDay = CacheHelper.GetCreateTrainingDay(_cache, _user.UserId);
 
-                                var message = $"Отлично, на данном этапе так выглядит расписание {schedule.ScheduleName}:\n\n";
+                        if (trainingDay is null)
+                            throw new Exception("trainingDay == null");
 
-                                foreach (var day in schedule.TrainingDays)
-                                {
-                                    message += $"<u><b>Тренировочный день: «{day.TrainingDayName}»</b></u>\n\n";
-                                    foreach (var exercise in day.Exercises)
-                                    {
-                                        message += $"{exercise.Exercise.ExerciseName}\n";
-                                    }
-                                    message += "\n";
-                                }
-                                message += "<b>Напиши название следующего тренировочного дня</b>";
+                        trainingDay.RestDaysAfter = result;
+                        schedule.TrainingDays.Add(trainingDay);
 
-                                await _bot.SendMessage(_chat.Id, message,
-                                replyMarkup: new InlineKeyboardMarkup()
-                                        .AddButton("Сохранить", "EndCreateSchedule")
-                                        .AddButton("Отменить создание расписания", "StopCreateSchedule"),
-                                parseMode: ParseMode.Html);
-                                UserStateManager.SetState(_user.UserId, State.AddTrainDay);
-                            }
-                        }
-                        else
-                        {
-                            throw new Exception("Расписание не найдено в кэше");
-                        }
-                    }
-                    else
-                    {
-                        await _bot.SendMessage(_chat.Id, $"Число должно быть больше нуля, либо равно нулю");
+                        CacheHelper.SetCreateSchedule(_cache, _user.UserId, schedule);
+
+                        var message = $"Отлично, на данном этапе так выглядит расписание {schedule.ScheduleName}:\n\n";
+
+                        message += Utils.GetStringSchedule(schedule);
+                        message += "<b>Напиши название следующего тренировочного дня</b>";
+
+                        await _bot.SendMessage(_chat.Id, message,
+                        replyMarkup: new InlineKeyboardMarkup()
+                                .AddButton("Сохранить", "EndCreateSchedule")
+                                .AddNewRow()
+                                .AddButton("Отменить создание расписания", "Main"),
+                        parseMode: ParseMode.Html);
+                        UserStateManager.SetState(_user.UserId, State.AddTrainDay, _cache);
                     }
                 }
                 else
@@ -369,80 +306,120 @@ namespace SportStats.Controllers
             }
             catch (Exception ex)
             {
-                UserStateManager.SetState(_user.UserId, State.None);
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
                 Console.WriteLine(ex.Message);
             }
+        }
 
+        public async void WriteDateSequenceTrainingDay(string text)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(text))
+                {
+                    var dateFirstTrainDay = Utils.ParseDate(text);
+
+                    if(dateFirstTrainDay == null)
+                    {
+                        await _bot.SendMessage(_chat.Id, $"Некорректные данные");
+                        return;
+                    }
+
+                    var schedule = CacheHelper.GetCreateSchedule(_cache, _user.UserId);
+                    if (schedule is null) throw new Exception("schedule == null");
+
+                    var trainingDay = CacheHelper.GetCreateTrainingDay(_cache, _user.UserId);
+                    if (trainingDay is null) throw new Exception("trainingDay == null");
+
+                    schedule.DateFirstTrainingDay = dateFirstTrainDay;
+                    var message = $"Для первого тренировочного дня установлена дата: {dateFirstTrainDay.Value.Date.ToString("dd MMMM", CultureInfo.CreateSpecificCulture("ru-RU"))}\n";
+
+                    using (var db = new SportContext())
+                    {
+                        var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).ToList();
+
+                        if (exercises is null) throw new Exception("exercises == null");
+
+                        message += $"Теперь добавь упражнения для тренировочного дня <b>«{trainingDay.TrainingDayName}»</b>\n\n";
+                        message += Utils.GetStringExercises(exercises);
+                        message += $"\n<b>Напиши номера через запятую. Если в списке нет нужного, то добавь новое упражнения начиная со *</b>";
+
+                        await _bot.SendMessage(_chat.Id,
+                            message,
+                            replyMarkup: new InlineKeyboardMarkup()
+                            .AddButton("Отменить создание расписания", "Main"),
+                            parseMode: ParseMode.Html);
+                        UserStateManager.SetState(_user.UserId, State.AddExerciseToTrainDay, _cache);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
+                Console.WriteLine(ex.Message);
+            }
         }
 
         public async void RemoveExercise(string text)
         {
             try
             {
-                try
+                if (!string.IsNullOrEmpty(text))
                 {
-                    if (!string.IsNullOrEmpty(text))
+                    using (var db = new SportContext())
                     {
-                        using (var db = new SportContext())
+                        var splitText = text.Replace(" ", "").Split(',');
+                        var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).OrderBy(e => e.CreatedOn).ToList();
+                        var removedExercises = new List<string>();
+
+
+                        if (exercises == null)
+                            throw new Exception("exercises == null");
+
+                        for (int i = 0; i < splitText.Length; i++)
                         {
-                            var splitText = text.Replace(" ", "").Split(',');
-                            var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).OrderBy(e => e.CreatedOn).ToList();
-                            var removedExercises = new List<string>();
-
-
-                            if (exercises == null)
-                                throw new Exception("exercises == null");
-
-                            for (int i = 0; i < splitText.Length; i++)
+                            if (int.TryParse(splitText[i], out var num))
                             {
-                                if (int.TryParse(splitText[i], out var num))
+                                if (num - 1 <= exercises.Count())
                                 {
-                                    if (num - 1 <= exercises.Count())
-                                    {
-                                        db.Exercises.Remove(exercises[num - 1]);
-                                        removedExercises.Add(exercises[num - 1].ExerciseName);
-                                    }
-                                }
-                                else
-                                {
-                                    await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
-                                    return;
+                                    db.Exercises.Remove(exercises[num - 1]);
+                                    removedExercises.Add(exercises[num - 1].ExerciseName);
                                 }
                             }
-
-                            db.SaveChanges();
-
-                            if (!removedExercises.Any())
+                            else
                             {
                                 await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
                                 return;
                             }
-                            else
+                        }
+
+                        db.SaveChanges();
+
+                        if (!removedExercises.Any())
+                        {
+                            await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
+                            return;
+                        }
+                        else
+                        {
+                            var message = "Удаленные упражнения:\n\n";
+                            foreach (var exercise in removedExercises)
                             {
-                                var message = "Удаленные упражнения:\n\n";
-                                foreach (var exercise in removedExercises)
-                                {
-                                    message += $"{exercise}\n";
-                                }
-                                await _bot.SendMessage(_chat.Id, message,
-                                    replyMarkup: new InlineKeyboardMarkup()
-                                    .AddButton("Добавить упражнения", "AddExercises")
-                                    .AddButton("На главную", "ToHome"));
-                                UserStateManager.SetState(_user.UserId, State.None);
+                                message += $"{exercise}\n";
                             }
+                            await _bot.SendMessage(_chat.Id, message,
+                                replyMarkup: new InlineKeyboardMarkup()
+                                .AddButton("Добавить упражнения", "AddExercises")
+                                .AddButton("Закончить", "Main"));
+                            UserStateManager.SetState(_user.UserId, State.None, _cache);
                         }
                     }
                 }
-                catch (Exception ex)
-                {
-                    UserStateManager.SetState(_user.UserId, State.None);
-                    Console.WriteLine(ex.Message);
-                }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-
-                throw;
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
+                Console.WriteLine(ex.Message);
             }
         }
     }

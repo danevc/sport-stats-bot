@@ -11,16 +11,40 @@ namespace SportStats.Models
 {
     public class User
     {
-        [Key]
-        [DatabaseGenerated(DatabaseGeneratedOption.None)]
+        /// <summary>
+        /// ID пользователя
+        /// </summary>
+        [Key, DatabaseGenerated(DatabaseGeneratedOption.None)]
         public long UserId { get; set; }
-        public DateTime CreatedOn { get; set; }
-        public string UserName { get; set; }
-        public string FirstName { get; set; }
-        public Gender? Gender { get; set; }
-        public DateTime? DayOfBirth { get; set; }
-        public int Height { get; set; }
-        public List<Schedule> Schedules { get; set; }
-        public List<Exercise> Exercises { get; set; }
+
+        /// <summary>
+        /// Дата создания
+        /// </summary>
+        public DateTime? CreatedOn { get; set; }
+
+        /// <summary>
+        /// Username в Telegram
+        /// </summary>
+        public string? Username { get; set; }
+
+        /// <summary>
+        /// Имя
+        /// </summary>
+        public string? FirstName { get; set; }
+
+        /// <summary>
+        /// Id выбранного расписания
+        /// </summary>
+        public Guid? CurrentScheduleId { get; set; }
+
+        /// <summary>
+        /// Расписание
+        /// </summary>
+        public virtual List<Schedule> Schedules { get; set; } = new();
+
+        /// <summary>
+        /// Упражнения
+        /// </summary>
+        public virtual List<Exercise> Exercises { get; set; } = new();
     }
 }

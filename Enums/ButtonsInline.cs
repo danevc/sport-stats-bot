@@ -8,16 +8,13 @@ namespace SportStats.Enums
 {
     public enum ButtonsInline
     {
-        ChooseDayOfWeek,
-        AddSchedule,
-        StartWithSchedule,
-        OnSaveScheduler,
+        None,
+        Start,
         Workout,
-        AddingExercises,
+        Settings,
         Stats,
-        StatsByMuscleGroup,
-        StatsByExercise,
-        YesOrNo,
-        None
+        Schedule,
+        Exercises,
+        AddInfoWorkout
     }
 }

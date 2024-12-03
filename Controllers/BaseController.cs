@@ -10,13 +10,15 @@ namespace SportStats.Controllers
         protected Chat _chat;
         protected Models.User _user;
         protected readonly IMemoryCache _cache;
+        protected Service _service;
 
-        public BaseController(Models.User user, ITelegramBotClient botClient, Chat chat, IMemoryCache cache)
+        public BaseController(Models.User user, ITelegramBotClient botClient, Chat chat, IMemoryCache cache, Service service)
         {
             _cache = cache;
             _chat = chat;
             _bot = botClient;
             _user = user;
+            _service = service;
         }
     }
 }

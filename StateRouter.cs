@@ -1,11 +1,5 @@
 ﻿using SportStats.Controllers;
 using SportStats.Enums;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Telegram.Bot.Types;
 
 namespace SportStats
 {
@@ -24,10 +18,15 @@ namespace SportStats
             { State.AddTrainDay, mainController.AddTrainDay },
             { State.AddExerciseToTrainDay, mainController.AddExercisesToTrainDay },
             { State.AddDayRest, mainController.AddDayRest },
-            { State.Workout, workoutController.Workout },
+            { State.WriteDateSequenceTrainingDay, mainController.WriteDateSequenceTrainingDay },
+            { State.AddAverageHeartRate, workoutController.AddAverageHeartRate },
+            { State.AddCalories, workoutController.AddCalories },
+            { State.AddDurationWorkout, workoutController.AddDurationWorkout },
+            { State.WorkoutChooseExercise, workoutController.ChooseExercise },
+            { State.ChooseTrainingDay, workoutController.ChooseTrainingDay },
             { State.DoExercise, workoutController.DoExercise },
-            { State.Stats, statisticController.Stats },
-            { State.StatsByMuscleGroup, statisticController.StatsByMuscleGroup }
+            { State.StatsChooseExercise, statisticController.StatsByExercise },
+            { State.TrainingDayStats, statisticController.TrainingDayStats },
         };
         }
 

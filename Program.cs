@@ -1,19 +1,18 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using Telegram.Bot;
+﻿using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using SportStats.Enums;
-using System.Linq;
 using SportStats.Controllers;
 using SportStats;
 using Microsoft.Extensions.Caching.Memory;
 using Telegram.Bot.Types.ReplyMarkups;
 using SportStats.Models;
+using System;
+using Microsoft.EntityFrameworkCore;
 
 IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+Service _service = new Service();
 using var cts = new CancellationTokenSource();
 var bot = new TelegramBotClient("7602969726:AAHvO3euZ71LJJOHY0zgHLp-2YT29fMLpOo", cancellationToken: cts.Token);
 var me = await bot.GetMe();
@@ -28,76 +27,389 @@ async Task OnUpdate(Update update)
 {
     if (update is { CallbackQuery: { } query })
     {
-        switch (query.Data)
-        {
-            case "AddExercises":
-                await bot.EditMessageText(query.Message!.Chat,
-                   query.Message.Id,
-                   "Напиши название упражнения\n",
-                   replyMarkup: null);
-                UserStateManager.SetState(query.From.Id, State.AddExercise);
-                break;
-            case "StopAddExercises":
-                await bot.AnswerCallbackQuery(query.Id);
-                await bot.SendMessage(query.Message!.Chat.Id,
-                   "Отлично! Ты можешь создать расписание.\nЕсли хочешь пропустить нажми /start",
-                   replyMarkup: new InlineKeyboardMarkup()
-                   .AddButton("Создать расписание", "AddSchedule"));
-                UserStateManager.SetState(query.From.Id, State.None);
-                break;
-            case "AddSchedule":
-                await bot.EditMessageText(query.Message!.Chat,
-                   query.Message.Id,
-                   "Напиши название расписания",
-                   replyMarkup: null);
-                UserStateManager.SetState(query.From.Id, State.AddSchedule);
-                break;
-            case "StopAddExercisesToTrainDay":
-                await bot.EditMessageText(query.Message!.Chat,
-                   query.Message.Id,
-                   "Напиши количество полных дней отдыха после этого дня",
-                   replyMarkup: null);
-                UserStateManager.SetState(query.From.Id, State.AddDayRest);
-                break;
-            case "StopCreateSchedule":
-                await bot.EditMessageText(query.Message!.Chat,
-                   query.Message.Id,
-                   "/start",
-                   replyMarkup: null);
-                _cache.Remove($"{query.From.Id}CreateSchedule");
-                _cache.Remove($"{query.From.Id}CreateTrainingDay");
-                UserStateManager.SetState(query.From.Id, State.None);
-                break;
-            case "EndCreateSchedule":
-                if (_cache.TryGetValue($"{query.From.Id}CreateSchedule", out Schedule schedule))
-                {
-                    if (schedule == null)
-                        throw new Exception("schedule == null");
+        if (query.Message == null)
+            throw new Exception("query.Message == null");
 
-                    using (var db = new SportContext())
+        using (var db = new SportContext())
+        {
+            var user = db.Users.FirstOrDefault(e => e.UserId == query.From.Id);
+
+            if (user == null)
+                return;
+
+            var chatId = query.Message!.Chat.Id;
+            var msgId = query.Message.Id;
+
+            InlineKeyboardMarkup? keyboard;
+            string message;
+
+            switch (query.Data)
+            {
+                #region Основные
+                case "Main":
+                    _cache = new MemoryCache(new MemoryCacheOptions());
+                    message = "<b>Привет!</b>✌";
+                    keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Start);
+
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.SendMessage(chatId, message, replyMarkup: keyboard, parseMode: ParseMode.Html);
+                    UserStateManager.SetState(user.UserId, State.None, _cache);
+                    break;
+
+                case "Back":
+                    var keyboardState = CacheHelper.GetKeyboardState(_cache, user.UserId, msgId);
+                    message = keyboardState?.MessageText ?? "";
+                    keyboard = keyboardState?.KeyboardMarkup;
+
+                    if (string.IsNullOrEmpty(message))
+                        return;
+
+                    var state = CacheHelper.GetUserState(_cache, user.UserId) ?? State.None;
+                    UserStateManager.SetState(user.UserId, state, _cache);
+                    await bot.EditMessageText(chatId, msgId, message, replyMarkup: keyboard);
+                    return;
+
+                case "Exercises":
+                    message = "Упражнения";
+                    keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Exercises);
+                    await bot.EditMessageText(chatId, msgId, message, replyMarkup: keyboard);
+                    break;
+
+                case "Schedule":
+                    message = "Расписание";
+                    keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Schedule);
+                    await bot.EditMessageText(chatId, msgId, message, replyMarkup: keyboard);
+                    break;
+
+                case "Stats":
+                    message = "Статистика";
+                    keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Stats);
+                    await bot.EditMessageText(chatId, msgId, message, replyMarkup: keyboard);
+                    break;
+
+                case "Settings":
+                    message = "Настройки";
+                    keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Settings);
+                    await bot.EditMessageText(chatId, msgId, message, replyMarkup: keyboard);
+                    break;
+
+                case "Workout":
+                    message = "Тренировка";
+                    keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Workout);
+                    await bot.EditMessageText(chatId, msgId, message, replyMarkup: keyboard);
+                    break;
+                #endregion
+
+                #region Тренировки
+                case "StartWorkoutExercise":
+                    var exercises = db.Exercises.Where(e => e.UserId == user.UserId).ToList();
+
+                    message = "Твои упражнения:\n\n";
+                    message += Utils.GetStringExercises(exercises, CacheHelper.GetDoneExercises(_cache, user.UserId));
+                    message += "\n<b>Напиши номер упражнения</b>";
+
+                    CacheHelper.SetTodayExercises(_cache, user.UserId, exercises);
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.SendMessage(chatId, message, parseMode: ParseMode.Html);
+                    UserStateManager.SetState(user.UserId, State.WorkoutChooseExercise, _cache);
+                    break;
+
+                case "StartWorkoutSchedule":
+                    var userSchedule = db.Schedules
+                        .Include(e => e.TrainingDays)
+                        .ThenInclude(e => e.Exercises)
+                        .FirstOrDefault(e => e.ScheduleId == user.CurrentScheduleId);
+
+                    if (!user.Schedules.Any() || user.CurrentScheduleId is null || userSchedule is null || userSchedule.DateFirstTrainingDay is null)
                     {
-                        db.Schedules.Add(schedule);
+                        await bot.EditMessageText(chatId, msgId, "Настрой расписание в разделе <b>«Расписание»</b>",
+                            parseMode: ParseMode.Html,
+                            replyMarkup: new InlineKeyboardMarkup()
+                            .AddButton("« Назад", "Back"));
+                        break;
+                    }
+
+                    var trainingDay = Utils.GetCurrentTrainDay(userSchedule);
+
+                    if (trainingDay is null)
+                    {
+                        await bot.AnswerCallbackQuery(query.Id);
+                        await bot.EditMessageText(chatId, msgId, $"По расписанию <b>«{userSchedule.ScheduleName}»</b> сегодня нет тренировок",
+                        replyMarkup: new InlineKeyboardMarkup()
+                        .AddButton("Выбрать тренировочный день", "ChooseTrainingDay")
+                        .AddNewRow()
+                        .AddButton("« Назад", "Back"),
+                        parseMode: ParseMode.Html);
+                        break;
+                    }
+                    else
+                    {
+                        var workout1 = new Workout
+                        {
+                            WorkoutId = Guid.NewGuid(),
+                            TrainingDayId = trainingDay.TrainingDayId,
+                            UserId = user.UserId
+                        };
+
+                        CacheHelper.SetCreateWorkout(_cache, user.UserId, workout1);
+
+                        message = $"Тренировка: <b>«{trainingDay.TrainingDayName}»</b>\nУпражнения:\n\n";
+                        message += Utils.GetStringExercises(trainingDay.Exercises, CacheHelper.GetDoneExercises(_cache, user.UserId));
+                        message += "\n<b>Напиши номер упражнения</b>";
+
+                        CacheHelper.SetTodayExercises(_cache, user.UserId, trainingDay.Exercises);
+                        await bot.AnswerCallbackQuery(query.Id);
+                        await bot.SendMessage(chatId, 
+                            message,
+                            replyMarkup: new InlineKeyboardMarkup()
+                                    .AddButton("Закончить тренировку", "EndWorkout"),
+                            parseMode: ParseMode.Html);
+                        UserStateManager.SetState(user.UserId, State.WorkoutChooseExercise, _cache);
+                    }
+                    break;
+
+                case "ChooseTrainingDay":
+                    userSchedule = db.Schedules
+                        .Include(e => e.TrainingDays)
+                        .FirstOrDefault(e => e.ScheduleId == user.CurrentScheduleId);
+
+                    if (userSchedule == null)
+                        throw new Exception("userSchedule == null");
+
+                    message = $"Тренировочные дни в расписании <b>«{userSchedule.ScheduleName}»</b>\n\n";
+                    foreach (var day in userSchedule.TrainingDays.OrderBy(e => e.SequenceNumber))
+                    {
+                        message += $"<b>{day.SequenceNumber}.</b> {day.TrainingDayName}\n";
+                    }
+                    message += "\n<b>Напиши номер тренировочного дня</b>";
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.SendMessage(chatId, message, parseMode: ParseMode.Html);
+                    UserStateManager.SetState(user.UserId, State.ChooseTrainingDay, _cache);
+                    break;
+
+                case "EndWriteExerciseReport":
+                    exercises = CacheHelper.GetTodayExercises(_cache, user.UserId);
+                    var replyMarkup = ButtonsKit.GetBtnsInline(ButtonsInline.AddInfoWorkout, user.UserId, _cache);
+
+                    if (exercises == null)
+                        throw new Exception("exercises == null");
+                    
+                    var curExercise = CacheHelper.GetCurrentExercise(_cache, user.UserId);
+
+                    if (curExercise == null)
+                        throw new Exception("curExercise == null");
+
+                    CacheHelper.AddDoneExercises(_cache, user.UserId, curExercise);
+                    var doneExercises1 = CacheHelper.GetDoneExercises(_cache, user.UserId);
+
+                    message = "Выбери следующее упражнение\n\n";
+                    message += Utils.GetStringExercises(exercises, doneExercises1);
+                    message += "\n<b>Напиши номер упражнения</b>";
+
+                    CacheHelper.RemoveCurrentExercise(_cache, user.UserId);
+                    CacheHelper.RemoveCurrentApproach(_cache, user.UserId);
+
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.SendMessage(chatId,
+                        message,
+                        replyMarkup: replyMarkup,
+                        parseMode: ParseMode.Html);
+                    UserStateManager.SetState(user.UserId, State.WorkoutChooseExercise, _cache);
+                    break;
+
+                case "EndWorkout":
+                    var workout = CacheHelper.GetCreateWorkout(_cache, user.UserId);
+
+                    if (workout == null)
+                    {
+                        var exReport = CacheHelper.GetExerciseReport(_cache, user.UserId);
+                        db.ExerciseReports.AddRange(exReport.ToList());
                         db.SaveChanges();
                     }
-                    await bot.EditMessageText(query.Message!.Chat,
-                       query.Message.Id,
-                       "Расписание добавлено. Нажми /start",
-                       replyMarkup: null);
-                    _cache.Remove($"{query.From.Id}CreateSchedule");
-                    _cache.Remove($"{query.From.Id}CreateTrainingDay");
-                    UserStateManager.SetState(query.From.Id, State.None);
-                }
-                break;
-            case "DeleteExercise": 
-                await bot.AnswerCallbackQuery(query.Id);
-                await bot.SendMessage(query.Message!.Chat.Id,
-                   "Напиши номера упражнений которые хочешь удалить через запятую",
-                   replyMarkup: new InlineKeyboardMarkup()
-                   .AddButton("Отменить", "AddExercises"));
-                UserStateManager.SetState(query.From.Id, State.RemoveExercise);
-                break;
-            default:
-                break;
+                    else
+                    {
+                        db.Workouts.Add(workout);
+                        db.SaveChanges();
+                    }
+                    _cache = new MemoryCache(new MemoryCacheOptions());
+
+
+                    message = "<b>Тренировка окончена</b>";
+                    keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Start);
+
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.SendMessage(chatId,
+                        message,
+                        replyMarkup: keyboard,
+                        parseMode: ParseMode.Html);
+                    UserStateManager.SetState(user.UserId, State.None, _cache);
+                    break;
+
+                case "AddAverageHeartRate":
+                    message = "Напиши средний пульс на этой тренировке";
+                    await bot.EditMessageText(chatId,
+                        msgId,
+                        message,
+                        replyMarkup: new InlineKeyboardMarkup()
+                        .AddButton("« Назад", "Back"));
+                    UserStateManager.SetState(user.UserId, State.AddAverageHeartRate, _cache);
+                    break;
+
+                case "AddCalories":
+                    message = "Напиши количество сожжённых калорий за тренировку";
+                    await bot.EditMessageText(chatId,
+                        msgId,
+                        message,
+                        replyMarkup: new InlineKeyboardMarkup()
+                        .AddButton("« Назад", "Back"));
+                    UserStateManager.SetState(user.UserId, State.AddCalories, _cache);
+                    break;
+
+                case "AddDurationWorkout":
+                    message = "Напиши продолжительность тренировки.\nПример: 1ч35мин | 35мин";
+                    await bot.EditMessageText(chatId,
+                        msgId,
+                        message,
+                        replyMarkup: new InlineKeyboardMarkup()
+                        .AddButton("« Назад", "Back"));
+                    UserStateManager.SetState(user.UserId, State.AddDurationWorkout, _cache);
+                    break;
+                #endregion
+
+                #region Статистика
+                case "ExerciseStats":
+                    exercises = db.Exercises.Where(e => e.UserId == user.UserId).ToList();
+
+                    message = "Твои упражнения:\n\n";
+                    message += Utils.GetStringExercises(exercises, CacheHelper.GetDoneExercises(_cache, user.UserId));
+                    message += "\n<b>Напиши номер упражнения</b>";
+
+                    CacheHelper.SetTodayExercises(_cache, user.UserId, exercises);
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.SendMessage(chatId,
+                        message,
+                        replyMarkup: new InlineKeyboardMarkup()
+                        .AddButton("« Назад", "Back"), 
+                        parseMode: ParseMode.Html);
+                    UserStateManager.SetState(user.UserId, State.StatsChooseExercise, _cache);
+                    break;
+
+                case "WorkoutStats":
+                    var exerciseIds = db.Exercises.Where(e => e.UserId == user.UserId).Select(e => e.ExerciseId).ToList();
+
+                    var workouts = db.ExerciseReports
+                        .Where(e => e.CreatedOn >= DateTime.Now.AddMonths(-2) && exerciseIds.Contains(e.ExerciseId))
+                        .GroupBy(e => e.CreatedOn.Value.Date).ToList();
+
+                    if (workouts is null)
+                    {
+                        await bot.AnswerCallbackQuery(query.Id, "Тренировки не найдены");
+                        return;
+                    }
+
+                    var plot = Utils.CreateBarWorkoutPlot(workouts.OrderBy(x => x.Key).ToList());
+                    plot.SavePng("По тренировкам.png", 650, 500);
+
+                    using (var fileStream = new FileStream("По тренировкам.png", FileMode.Open, FileAccess.Read))
+                    {
+                        await bot.AnswerCallbackQuery(query.Id);
+                        await bot.SendPhoto(chatId, photo: InputFile.FromStream(fileStream, "По тренировкам.png"));
+                        message = "Результат по тренировкам⬆⬆⬆";
+                        keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Start);
+                        await bot.SendMessage(chatId, message, replyMarkup: keyboard, parseMode: ParseMode.Html);
+                        UserStateManager.SetState(user.UserId, State.None, _cache);
+                    }
+                    break;
+
+                case "TrainingDayStats":
+                    userSchedule = db.Schedules
+                         .Include(e => e.TrainingDays)
+                         .FirstOrDefault(e => e.ScheduleId == user.CurrentScheduleId);
+
+                    if (userSchedule == null)
+                        throw new Exception("userSchedule == null");
+
+                    message = $"Тренировочные дни в расписании <b>«{userSchedule.ScheduleName}»</b>\n\n";
+                    foreach (var day in userSchedule.TrainingDays.OrderBy(e => e.SequenceNumber))
+                    {
+                        message += $"<b>{day.SequenceNumber}.</b> {day.TrainingDayName}\n";
+                    }
+                    message += "\n<b>Напиши номер тренировочного дня</b>";
+
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.EditMessageText(chatId,
+                        msgId,
+                        message,
+                        replyMarkup: new InlineKeyboardMarkup()
+                        .AddButton("« Назад", "Back"),
+                        parseMode: ParseMode.Html);
+                    UserStateManager.SetState(user.UserId, State.TrainingDayStats, _cache);
+                    break;
+                #endregion
+
+                #region Настройки
+                case "AddExercises":
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.SendMessage(chatId,
+                       "Напиши название упражнения");
+                    UserStateManager.SetState(user.UserId, State.AddExercise, _cache);
+                    break;
+
+                case "AddSchedule":
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.SendMessage(chatId,
+                       "Напиши название расписания");
+                    UserStateManager.SetState(user.UserId, State.AddSchedule, _cache);
+                    break;
+
+                case "StopAddExercisesToTrainDay":
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.SendMessage(chatId,
+                       "Напиши количество полных дней отдыха после этого дня");
+                    UserStateManager.SetState(user.UserId, State.AddDayRest, _cache);
+                    break;
+
+                case "NextToAddDayRest":
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.SendMessage(chatId,
+                       "Напиши количество полных дней отдыха после этого тренировочного дня");
+                    UserStateManager.SetState(user.UserId, State.AddDayRest, _cache);
+                    break;
+
+                case "EndCreateSchedule":
+                    await bot.AnswerCallbackQuery(query.Id);
+
+                    var schedule = CacheHelper.GetCreateSchedule(_cache, user.UserId);
+                    if (schedule is null) break;
+
+                    var result = _service.EditOrCreateSchedule(schedule);
+                    user.CurrentScheduleId = schedule.ScheduleId;
+                    db.SaveChanges();
+
+                    message = result.Message ?? "";
+                    keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Start);
+                    await bot.SendMessage(chatId, message, replyMarkup: keyboard);
+
+                    CacheHelper.RemoveCreateTrainingDay(_cache, user.UserId);
+                    CacheHelper.RemoveCreateSchedule(_cache, user.UserId);
+                    UserStateManager.SetState(user.UserId, State.None, _cache);
+                    break;
+
+                case "DeleteExercise":
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.SendMessage(chatId,
+                       "Напиши номера упражнений которые хочешь удалить через запятую",
+                       replyMarkup: new InlineKeyboardMarkup()
+                       .AddButton("Отменить", "AddExercises"));
+                    UserStateManager.SetState(user.UserId, State.RemoveExercise, _cache);
+                    break;
+                #endregion
+
+                default:
+                    await bot.SendMessage(chatId, "Неизвестная кнопка!");
+                    break;
+            }
+            CacheHelper.SetKeyboardState(_cache, user.UserId, msgId, query.Message.ReplyMarkup, query.Message.Text);
         }
     }
 }
@@ -106,7 +418,11 @@ async Task OnMessage(Message msg, UpdateType type)
 {
     using (var db = new SportContext())
     {
-        var text = msg.Text;
+        var text = msg.Text ?? "";
+
+        if (msg.From == null)
+            throw new Exception("msg.from == null");
+
 
         var user = db.Users.FirstOrDefault(e => e.UserId == msg.From.Id);
         if (user == null)
@@ -114,24 +430,23 @@ async Task OnMessage(Message msg, UpdateType type)
             var newUser = new SportStats.Models.User
             {
                 UserId = msg.From.Id,
-                CreatedOn = DateTime.Now,
-                UserName = msg.From.Username,
+                Username = msg.From.Username,
                 FirstName = msg.From.FirstName
             };
             db.Users.Add(newUser);
             db.SaveChanges();
 
-            user = newUser;
+            user = db.Users.FirstOrDefault(e => e.UserId == msg.From.Id);
         }
 
         var state = UserStateManager.GetState(user.UserId);
 
         var stateRouter = new StateRouter(
-                new MainController(user, bot, msg.Chat, _cache),
-                new WorkoutController(user, bot, msg.Chat, _cache),
-                new StatisticController(user, bot, msg.Chat, _cache));
+                new MainController(user, bot, msg.Chat, _cache, _service),
+                new WorkoutController(user, bot, msg.Chat, _cache, _service),
+                new StatisticController(user, bot, msg.Chat, _cache, _service));
 
-        if (text == Utils._btn_ToHome || text == "/start" || text == "Home")
+        if (text == "/start" || text == "Home")
         {
             stateRouter.Route(State.None, text);
         }

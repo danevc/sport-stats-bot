@@ -1,10 +1,11 @@
-﻿using System.Collections.Concurrent;
+﻿using Microsoft.Extensions.Caching.Memory;
+using System.Collections.Concurrent;
 
 namespace SportStats.Enums
 {
     public enum State
     {
-        None,
+        None = 0,
         CreateSchedule,
         ChangeSchedule,
         AddDayOfWeek,
@@ -17,20 +18,29 @@ namespace SportStats.Enums
         StatsByMuscleGroup,
         AddMuscleGroup,
         AddStandardMuscleGroup,
-        Start,
         AddSchedule,
         AddTrainDay,
         AddExerciseToTrainDay,
         AddDayRest,
-        RemoveExercise
+        RemoveExercise,
+        WorkoutChooseExercise,
+        WorkoutSchedule,
+        WriteDateSequenceTrainingDay,
+        ChooseTrainingDay,
+        StatsChooseExercise,
+        AddAverageHeartRate,
+        AddCalories,
+        AddDurationWorkout,
+        TrainingDayStats
     }
 
     public static class UserStateManager
     {
         private static readonly ConcurrentDictionary<long, State> _userStates = new ConcurrentDictionary<long, State>();
 
-        public static void SetState(long userId, State state)
+        public static void SetState(long userId, State state, IMemoryCache cache)
         {
+            CacheHelper.SetUserState(cache, userId, state);
             _userStates[userId] = state;
         }
 

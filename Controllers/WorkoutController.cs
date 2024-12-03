@@ -1,45 +1,26 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using SportStats.Enums;
 using SportStats.Interfaces;
+using SportStats.Models;
 using System;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace SportStats.Controllers
 {
     public class WorkoutController : BaseController, IWorkout
     {
-        public WorkoutController(Models.User user, ITelegramBotClient bot, Chat chat, IMemoryCache cache) : base(user, bot, chat, cache)
-        {
+        public WorkoutController(Models.User user, ITelegramBotClient bot, Chat chat, IMemoryCache cache, Service service) : base(user, bot, chat, cache, service) { }
 
-        }
-
-        public void DoExercise(string text)
+        public async void DoExercise(string text)
         {
             try
             {
-                /**if (text == "-")
-                {
-                    var response = "";
-                    if (History.GetNumApproach() <= 1)
-                    {
-                        response += "Выбери упражнение";
-                    }
-                    else
-                    {
-                        response += "Результаты сохранены.\nВыбери следующее упражнение";
-                        if (History.GetCurrentExercise() != new Exercise())
-                        {
-                            History.AddDoneExercises(History.GetCurrentExercise().Id);
-                        }
-                    }
-                    History.SetCurrentExercise(new Exercise());
-                    History.SetNumApproach(1);
-                    var replyKeyboard = ButtonsKit.ChangeButtons(ButtonGroups.Workout);
-                    await botClient.SendTextMessageAsync(chat.Id, response, replyMarkup: replyKeyboard);
-                    return State.Workout;
-                }
-                else if (!string.IsNullOrEmpty(text))
+                if (!string.IsNullOrEmpty(text))
                 {
                     try
                     {
@@ -47,91 +28,347 @@ namespace SportStats.Controllers
 
                         if (weight < 0 || numOfRepetitions < 0)
                         {
-                            await botClient.SendTextMessageAsync(chat.Id, $"Данные введены не верно");
+                            await _bot.SendMessage(_chat.Id, $"Данные введены не верно");
                         }
                         else
                         {
-                            var numApproach = History.GetNumApproach();
+                            var curExercise = CacheHelper.GetCurrentExercise(_cache, _user.UserId);
 
-                            var sportAudit = new SportAudit
+                            if (curExercise == null)
+                                throw new Exception("curExercise == null");
+
+                            var approach = CacheHelper.GetCurrentApproach(_cache, _user.UserId);
+
+                            var exerciseReport = new ExerciseReport
                             {
-                                Id = Guid.NewGuid(),
-                                ExerciseId = History.GetCurrentExercise().Id,
-                                MuscleGroupId = History.GetSchedule().FirstOrDefault(e => (int)e.DayOfWeek == History.GetDay()).MuscleGroupId,
-                                UserId = user.Id,
-                                WorkoutDate = DateTime.Now,
+                                ExerciseReportId = Guid.NewGuid(),
+                                CreatedOn = DateTime.Now,
+                                ExerciseId = curExercise.ExerciseId,
                                 Weight = weight,
                                 NumOfRepetitions = numOfRepetitions,
-                                Approach = numApproach
+                                Approach = approach
                             };
 
-                            SqlSport.AddSportAudit(sportAudit);
-                            numApproach++;
-                            var lastEx = History.GetAuditLastWorkout()?.Exercises?.FirstOrDefault(e => e.ExerciseId == History.GetCurrentExercise()?.Id && e.Approach == numApproach);
-                            History.SetNumApproach(numApproach);
-                            await botClient.SendTextMessageAsync(chat.Id, Utils.GetWorkoutStringResponse(numApproach, lastEx), parseMode: ParseMode.Html);
-                        }
+                            var workout = CacheHelper.GetCreateWorkout(_cache, _user.UserId);
 
+                            if(workout is not null)
+                            {
+                                workout.ExerciseReports.Add(exerciseReport);
+                                CacheHelper.SetCreateWorkout(_cache, _user.UserId, workout);
+                                CacheHelper.AddExerciseReport(_cache, _user.UserId, exerciseReport);
+                            }
+                            else
+                            {
+                                CacheHelper.AddExerciseReport(_cache, _user.UserId, exerciseReport);
+                            }
+
+                            approach++;
+
+                            using (var db = new SportContext())
+                            {
+                                var maxCreatedOn = db.ExerciseReports
+                                    .Where(e => e.ExerciseId == curExercise.ExerciseId && e.Approach == approach && e.CreatedOn < DateTime.Today)
+                                    .Max(e => e.CreatedOn);
+
+                                var lastEx = db.ExerciseReports
+                                    .FirstOrDefault(e => e.ExerciseId == curExercise.ExerciseId && e.Approach == approach && e.CreatedOn == maxCreatedOn);
+
+                                CacheHelper.SetCurrentApproach(_cache, _user.UserId, approach);
+                                var message = Utils.GetWorkoutStringMessage(approach, curExercise, lastEx);
+                                await _bot.SendMessage(_chat.Id, message,
+                                    replyMarkup: new InlineKeyboardMarkup()
+                                    .AddButton("Закончить", "EndWriteExerciseReport"),
+                                    parseMode: ParseMode.Html);
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {
                         Console.WriteLine(ex.Message);
                     }
                 }
-                */
             }
             catch (Exception ex)
             {
-                UserStateManager.SetState(_user.UserId, State.None);
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
                 Console.WriteLine(ex.Message);
             }
         }
 
-        public async void Workout(string text)
+        public async void ChooseExercise(string text)
         {
             try
             {
-                /**if (text == Utils._btn_AddExercise)
+                if (!string.IsNullOrEmpty(text))
                 {
-                    var removeKeyboard = new ReplyKeyboardRemove();
-                    await botClient.SendTextMessageAsync(chat.Id, $"Напиши название упражнения для группы мышц <b>«{History.GetSchedule().FirstOrDefault(e => (int)e.DayOfWeek == History.GetDay()).MuscleGroupName}»</b>", replyMarkup: removeKeyboard, parseMode: ParseMode.Html);
-                    return State.AddExercise;
-                }
-
-                if (text[0] == '▶')
-                {
-                    text = text.Substring(2);
-                    var exercise = History.GetSchedule()?.FirstOrDefault(e => (int)e.DayOfWeek == History.GetDay())?.Exercises?.FirstOrDefault(e => e.ExerciseName == text);
-
-                    if (exercise != null)
+                    if(int.TryParse(text, out int num))
                     {
-                        var sportAudits = SqlSport.GetSportAudit(user.Id, exercise.MuscleGroupId);
-
-                        if (sportAudits.Any())
+                        using(var db = new SportContext())
                         {
-                            var maxDate = sportAudits.Max(x => x.WorkoutDate).Date;
-                            var latestSportAudits = sportAudits.Where(x => x.WorkoutDate.Date == maxDate).ToList().First();
-                            History.SetAuditLastWorkout(latestSportAudits);
+                            var exercises = CacheHelper.GetTodayExercises(_cache, _user.UserId).OrderBy(e => e.CreatedOn).ToList();
+
+                            if (exercises is null)
+                                throw new Exception("ChooseExercise || exercises is null");
+
+                            if (num - 1 <= exercises.Count)
+                            {
+                                var workout = CacheHelper.GetCreateWorkout(_cache, _user.UserId);
+                                int approach = 1;
+
+                                if (workout is not null)
+                                {
+                                    var exRep = workout.ExerciseReports.Where(e => e.ExerciseId == exercises[num - 1].ExerciseId);
+
+                                    if (exRep.Any())
+                                    {
+                                        approach = exRep.Max(e => e.Approach) + 1;
+                                    }
+                                }
+
+                                var maxCreatedOn = db.ExerciseReports
+                                    .Where(e => e.ExerciseId == exercises[num - 1].ExerciseId && e.Approach == approach && e.CreatedOn < DateTime.Today)
+                                    .Max(e => e.CreatedOn);
+
+                                var lastEx = db.ExerciseReports
+                                    .FirstOrDefault(e => e.ExerciseId == exercises[num - 1].ExerciseId && e.Approach == approach && e.CreatedOn == maxCreatedOn);
+
+                                CacheHelper.SetCurrentExercise(_cache, _user.UserId, exercises[num - 1]);
+                                CacheHelper.SetCurrentApproach(_cache, _user.UserId, approach);
+                                var message = Utils.GetWorkoutStringMessage(approach, exercises[num - 1], lastEx);
+                                await _bot.SendMessage(_chat.Id, 
+                                    message,
+                                    replyMarkup: new InlineKeyboardMarkup()
+                                    .AddButton("Закончить", "EndWriteExerciseReport"),
+                                    parseMode: ParseMode.Html);
+                                UserStateManager.SetState(_user.UserId, State.DoExercise, _cache);
+                            }
                         }
-
-                        History.SetCurrentExercise(exercise);
-
-                        var removeKeyboard = new ReplyKeyboardRemove();
-                        var numApproach = History.GetNumApproach();
-                        var lastEx = History.GetAuditLastWorkout()?.Exercises?.FirstOrDefault(e => e.ExerciseId == History.GetCurrentExercise()?.Id && e.Approach == numApproach);
-                        await botClient.SendTextMessageAsync(chat.Id, Utils.GetWorkoutStringResponse(numApproach, lastEx), parseMode: ParseMode.Html, replyMarkup: removeKeyboard);
-                        return State.RealizeExercise;
+                    }
+                    else
+                    {
+                        await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
                     }
                 }
-                else
-                {
-                    await botClient.SendTextMessageAsync(chat.Id, "Ты уже выполнил это упражнение");
-                    return State.Workout;
-                }*/
             }
             catch (Exception ex)
             {
-                UserStateManager.SetState(_user.UserId, State.None);
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        public async void ChooseTrainingDay(string text)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(text))
+                {
+                    if (int.TryParse(text, out int num))
+                    {
+                        using (var db = new SportContext())
+                        {
+                            var trainingDay = db.TrainingDays
+                                .Include(e => e.Exercises)
+                                .FirstOrDefault(e => e.ScheduleId == _user.CurrentScheduleId && e.SequenceNumber == num);
+
+                            if (trainingDay is null)
+                            {
+                                await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
+                            }
+
+                            var workout = new Workout
+                            {
+                                WorkoutId = Guid.NewGuid(),
+                                TrainingDayId = trainingDay.TrainingDayId,
+                                UserId = _user.UserId
+                            };
+
+                            CacheHelper.SetCreateWorkout(_cache, _user.UserId, workout);
+
+                            var message = $"Тренировка: <b>«{trainingDay.TrainingDayName}»</b>\nУпражнения:\n\n";
+                            message += Utils.GetStringExercises(trainingDay.Exercises, CacheHelper.GetDoneExercises(_cache, _user.UserId));
+                            message += "\n<b>Напиши номер упражнения</b>";
+
+                            CacheHelper.SetTodayExercises(_cache, _user.UserId, trainingDay.Exercises);
+                            await _bot.SendMessage(_chat.Id,
+                                message,
+                                replyMarkup: new InlineKeyboardMarkup()
+                                    .AddButton("Закончить тренировку", "EndWorkout"),
+                                parseMode: ParseMode.Html);
+                            UserStateManager.SetState(_user.UserId, State.WorkoutChooseExercise, _cache);
+                        }
+                    }
+                    else
+                    {
+                        await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        public async void AddAverageHeartRate(string text)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(text))
+                {
+                    if (int.TryParse(text, out int num))
+                    {
+                        if (num > 30 && num < 250)
+                        {
+                            var workout = CacheHelper.GetCreateWorkout(_cache, _user.UserId);
+
+                            if (workout is not null)
+                            {
+                                workout.AverageHeartRate = num;
+                                CacheHelper.SetCreateWorkout(_cache, _user.UserId, workout);
+
+                                var exercises = CacheHelper.GetTodayExercises(_cache, _user.UserId);
+                                var replyMarkup = ButtonsKit.GetBtnsInline(ButtonsInline.AddInfoWorkout, _user.UserId, _cache);
+
+                                if (exercises == null)
+                                    throw new Exception("exercises == null");
+
+                                var doneExercises = CacheHelper.GetDoneExercises(_cache, _user.UserId);
+
+                                var message = "Выбери следующее упражнение\n\n";
+                                message += Utils.GetStringExercises(exercises, doneExercises);
+                                message += "\n<b>Напиши номер упражнения</b>";
+
+                                await _bot.SendMessage(_chat.Id,
+                                    message,
+                                    replyMarkup: replyMarkup,
+                                    parseMode: ParseMode.Html);
+                                UserStateManager.SetState(_user.UserId, State.WorkoutChooseExercise, _cache);
+                            }
+                        }
+                        else
+                        {
+                            await _bot.SendMessage(_chat.Id, $"Значение не валидно");
+                        }
+                    }
+                    else
+                    {
+                        await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        public async void AddCalories(string text)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(text))
+                {
+                    if (int.TryParse(text, out int num))
+                    {
+                        if(num > 0 && num < 5000)
+                        {
+                            var workout = CacheHelper.GetCreateWorkout(_cache, _user.UserId);
+
+                            if (workout is not null)
+                            {
+                                workout.Calories = num;
+                                CacheHelper.SetCreateWorkout(_cache, _user.UserId, workout);
+
+                                var exercises = CacheHelper.GetTodayExercises(_cache, _user.UserId);
+                                var replyMarkup = ButtonsKit.GetBtnsInline(ButtonsInline.AddInfoWorkout, _user.UserId, _cache);
+
+                                if (exercises == null)
+                                    throw new Exception("exercises == null");
+
+                                var doneExercises = CacheHelper.GetDoneExercises(_cache, _user.UserId);
+
+                                var message = "Выбери следующее упражнение\n\n";
+                                message += Utils.GetStringExercises(exercises, doneExercises);
+                                message += "\n<b>Напиши номер упражнения</b>";
+
+                                await _bot.SendMessage(_chat.Id,
+                                    message,
+                                    replyMarkup: replyMarkup,
+                                    parseMode: ParseMode.Html);
+                                UserStateManager.SetState(_user.UserId, State.WorkoutChooseExercise, _cache);
+                            }
+                        }
+                        else
+                        {
+                            await _bot.SendMessage(_chat.Id, $"Значение не валидно");
+                        }
+                    }
+                    else
+                    {
+                        await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        public async void AddDurationWorkout(string text)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(text))
+                {
+                    if (Utils.TryParseTime(text, out int num))
+                    {
+                        if(num > 0 && num < 600)
+                        {
+                            var workout = CacheHelper.GetCreateWorkout(_cache, _user.UserId);
+
+                            if (workout is not null)
+                            {
+                                workout.Duration = num;
+                                CacheHelper.SetCreateWorkout(_cache, _user.UserId, workout);
+
+                                var exercises = CacheHelper.GetTodayExercises(_cache, _user.UserId);
+                                var replyMarkup = ButtonsKit.GetBtnsInline(ButtonsInline.AddInfoWorkout, _user.UserId, _cache);
+
+                                if (exercises == null)
+                                    throw new Exception("exercises == null");
+
+                                var doneExercises = CacheHelper.GetDoneExercises(_cache, _user.UserId);
+
+                                var message = "Выбери следующее упражнение\n\n";
+                                message += Utils.GetStringExercises(exercises, doneExercises);
+                                message += "\n<b>Напиши номер упражнения</b>";
+
+                                await _bot.SendMessage(_chat.Id,
+                                    message,
+                                    replyMarkup: replyMarkup,
+                                    parseMode: ParseMode.Html);
+                                UserStateManager.SetState(_user.UserId, State.WorkoutChooseExercise, _cache);
+                            }
+                        }
+                        else
+                        {
+                            await _bot.SendMessage(_chat.Id, $"Значение не валидно");
+                        }
+                    }
+                    else
+                    {
+                        await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
                 Console.WriteLine(ex.Message);
             }
         }
