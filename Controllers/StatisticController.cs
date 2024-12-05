@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using SportStats.Enums;
 using SportStats.Interfaces;
 using SportStats.Models;
@@ -15,7 +16,7 @@ namespace SportStats.Controllers
 {
     public class StatisticController : BaseController, IStatistic
     {
-        public StatisticController(Models.User user, ITelegramBotClient bot, Chat chat, IMemoryCache cache, Service service) : base(user, bot, chat, cache, service) { }
+        public StatisticController(Models.User user, ITelegramBotClient bot, Chat chat, IMemoryCache cache, Service service, IConfigurationRoot config) : base(user, bot, chat, cache, service, config) { }
 
         public async void StatsByExercise(string text)
         {
@@ -25,7 +26,7 @@ namespace SportStats.Controllers
                 {
                     if (int.TryParse(text, out int num))
                     {
-                        using (var db = new SportContext())
+                        using (var db = new SportContext(_config))
                         {
                             var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).OrderBy(e => e.CreatedOn).ToList();
 
@@ -99,7 +100,7 @@ namespace SportStats.Controllers
                 {
                     if (int.TryParse(text, out int num))
                     {
-                        using (var db = new SportContext())
+                        using (var db = new SportContext(_config))
                         {
                             var trainingDay = db.TrainingDays
                                 .Include(e => e.Exercises)

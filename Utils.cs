@@ -50,18 +50,13 @@ namespace SportStats
                 }
             }
 
-            if (DateTime.Today == date.Value.Date)
-            {
-                return schedule?.TrainingDays.FirstOrDefault(e => e.SequenceNumber == 1);
-            }
-
             foreach (var day in schedule.TrainingDays.OrderBy(e => e.SequenceNumber))
             {
-                date = date.Value.Date.AddDays(day.RestDaysAfter + 1);
                 if (date == DateTime.Today)
                 {
                     return day;
                 }
+                date = date.Value.Date.AddDays(day.RestDaysAfter + 1);
             }
 
             return null;
