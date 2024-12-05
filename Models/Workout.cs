@@ -31,8 +31,7 @@ namespace SportStats.Models
         /// <summary>
         /// ID тренировочного дня
         /// </summary>
-        [Required]
-        public Guid TrainingDayId { get; set; }
+        public Guid? TrainingDayId { get; set; }
 
         /// <summary>
         /// Продолжительность тренировки

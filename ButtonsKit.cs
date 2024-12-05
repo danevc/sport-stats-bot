@@ -85,7 +85,9 @@ namespace SportStats
                             }
                             inlineKeyboard
                                 .AddNewRow()
-                                .AddButton("Закончить тренировку", "EndWorkout"); ;
+                                .AddButton("Закончить тренировку", "EndWorkout")
+                                .AddNewRow()
+                                .AddButton("Отменить тренировку", "CancelWorkout");
                         }
                         return inlineKeyboard;
                     }

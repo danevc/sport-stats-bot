@@ -55,11 +55,6 @@ namespace SportStats.Controllers
                             {
                                 workout.ExerciseReports.Add(exerciseReport);
                                 CacheHelper.SetCreateWorkout(_cache, _user.UserId, workout);
-                                CacheHelper.AddExerciseReport(_cache, _user.UserId, exerciseReport);
-                            }
-                            else
-                            {
-                                CacheHelper.AddExerciseReport(_cache, _user.UserId, exerciseReport);
                             }
 
                             approach++;
@@ -105,36 +100,46 @@ namespace SportStats.Controllers
                     {
                         using(var db = new SportContext())
                         {
-                            var exercises = CacheHelper.GetTodayExercises(_cache, _user.UserId).OrderBy(e => e.CreatedOn).ToList();
+                            var exercises = CacheHelper.GetTodayExercises(_cache, _user.UserId);
 
                             if (exercises is null)
                                 throw new Exception("ChooseExercise || exercises is null");
 
+                            exercises = exercises.OrderBy(e => e.CreatedOn).ToList();
+
                             if (num - 1 <= exercises.Count)
                             {
+                                var exercise = exercises[num - 1];
                                 var workout = CacheHelper.GetCreateWorkout(_cache, _user.UserId);
                                 int approach = 1;
 
                                 if (workout is not null)
                                 {
-                                    var exRep = workout.ExerciseReports.Where(e => e.ExerciseId == exercises[num - 1].ExerciseId);
+                                    var exRep = workout.ExerciseReports.Where(e => e.ExerciseId == exercise.ExerciseId);
+                                    var exerciseReportsInDb = db.ExerciseReports
+                                        .Where(e => e.ExerciseId == exercise.ExerciseId && e.CreatedOn.Value.Date == DateTime.Now.Date); 
 
                                     if (exRep.Any())
                                     {
                                         approach = exRep.Max(e => e.Approach) + 1;
                                     }
+
+                                    if (exerciseReportsInDb.Any())
+                                    {
+                                        approach = exerciseReportsInDb.Max(e => e.Approach) + 1;
+                                    }
                                 }
 
                                 var maxCreatedOn = db.ExerciseReports
-                                    .Where(e => e.ExerciseId == exercises[num - 1].ExerciseId && e.Approach == approach && e.CreatedOn < DateTime.Today)
+                                    .Where(e => e.ExerciseId == exercise.ExerciseId && e.Approach == approach && e.CreatedOn < DateTime.Today)
                                     .Max(e => e.CreatedOn);
 
                                 var lastEx = db.ExerciseReports
-                                    .FirstOrDefault(e => e.ExerciseId == exercises[num - 1].ExerciseId && e.Approach == approach && e.CreatedOn == maxCreatedOn);
+                                    .FirstOrDefault(e => e.ExerciseId == exercise.ExerciseId && e.Approach == approach && e.CreatedOn == maxCreatedOn);
 
-                                CacheHelper.SetCurrentExercise(_cache, _user.UserId, exercises[num - 1]);
+                                CacheHelper.SetCurrentExercise(_cache, _user.UserId, exercise);
                                 CacheHelper.SetCurrentApproach(_cache, _user.UserId, approach);
-                                var message = Utils.GetWorkoutStringMessage(approach, exercises[num - 1], lastEx);
+                                var message = Utils.GetWorkoutStringMessage(approach, exercise, lastEx);
                                 await _bot.SendMessage(_chat.Id, 
                                     message,
                                     replyMarkup: new InlineKeyboardMarkup()

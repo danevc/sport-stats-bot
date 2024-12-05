@@ -266,7 +266,7 @@ namespace SportStats
             int hours = mins / 60;
             if (hours > 0)
             {
-                hoursString = $"{hours}ч {mins - hours * 60}мин";
+                hoursString = $"{hours}ч\n{mins - hours * 60}мин";
             }
             else
             {
@@ -276,7 +276,7 @@ namespace SportStats
             return hoursString;
         }
 
-        public static Plot CreateBarPlot(List<DateTime> dates, List<int> FirstPlot, List<int> SecondPlot, string Title = "Без названия")
+        public static Plot CreateExercisesPlot(List<DateTime> dates, List<int> FirstPlot, List<int> SecondPlot, string Title = "Без названия")
         {
             var myPlot = new Plot();
             var size = dates.Count();
@@ -375,7 +375,7 @@ namespace SportStats
             return myPlot;
         }
 
-        public static Plot CreateBarWorkoutPlot(List<IGrouping<DateTime, ExerciseReport>> workouts)
+        public static Plot CreateWorkoutPlot(List<Workout> workouts, string name)
         {
             var myPlot = new Plot();
 
@@ -383,93 +383,13 @@ namespace SportStats
             for (int i = 0; i < size; i++)
             {
                 var bars = new List<Bar>();
-
-                var coefficient = 0.0;
-                var workoutDuration = Convert.ToInt32((workouts[i].Max(e => e.CreatedOn) - workouts[i].Min(e => e.CreatedOn)).Value.TotalMinutes);
-
-                foreach (var exReport in workouts[i])
-                {
-                    coefficient += exReport.Weight != 0 ? exReport.Weight * exReport.NumOfRepetitions : exReport.NumOfRepetitions;
-                }
-                coefficient = Math.Round(coefficient / 400, 2);
-
-                bars.Add(new Bar()
-                {
-                    FillColor = Colors.Tomato,
-                    Position = i,
-                    ValueBase = 0,
-                    Value = coefficient,
-                    Label = $"{coefficient}",
-                    CenterLabel = true,
-                });
-                bars.Add(new Bar()
-                {
-                    FillColor = Colors.LightBlue,
-                    Position = i,
-                    ValueBase = coefficient,
-                    Value = workoutDuration,
-                    Label = $"{GetHoursByMin(workoutDuration)}",
-                    CenterLabel = true,
-                });
-                var barPlot = myPlot.Add.Bars(bars);
-                barPlot.Horizontal = false;
-            }
-
-            myPlot.Axes.Margins(bottom: 0);
-
-            var tickPositions = Generate.Consecutive(size);
-            var tickLabels = workouts.Select(x => $"{x.Key.ToString("dd MMMM", CultureInfo.CreateSpecificCulture("ru-RU"))}").ToArray();
-            
-            if (size > 8)
-            {
-                myPlot.Axes.Bottom.TickLabelStyle.Rotation = 30;
-                myPlot.Axes.Bottom.TickLabelStyle.Alignment = Alignment.MiddleLeft;
-            }
-
-            var item1 = new LegendItem()
-            {
-                LabelText = "Длительность тренировки",
-                FillColor = Colors.LightBlue
-            };
-            var item2 = new LegendItem()
-            {
-                LabelText = "Эффективность",
-                FillColor = Colors.Tomato
-            };
-
-            var padding = new PixelPadding(30, 30, 100, 100);
-
-            myPlot.Legend.ManualItems.Add(item1);
-            myPlot.Legend.ManualItems.Add(item2);
-            myPlot.Axes.Bottom.SetTicks(tickPositions, tickLabels);
-            myPlot.HideGrid();
-            myPlot.Legend.Orientation = Orientation.Horizontal;
-            myPlot.ShowLegend(Edge.Bottom);
-            myPlot.Layout.Fixed(padding);
-            myPlot.Axes.Title.Label.Text = "Статистика тренировок";
-            myPlot.Axes.Title.Label.ForeColor = Colors.DarkRed;
-            myPlot.Axes.Title.Label.FontSize = 32;
-            myPlot.Axes.Title.Label.Bold = true;
-
-            return myPlot;
-        }
-
-        public static Plot CreateBarWorkoutPlot1(List<Workout> workouts, string name)
-        {
-            var myPlot = new Plot();
-
-            int size = workouts.Count();
-            for (int i = 0; i < size; i++)
-            {
-                var bars = new List<Bar>();
-
-                var coefficient = 0.0;
 
                 var workoutDuration 
                     = workouts[i].Duration == 0 
                     ? Convert.ToInt32((workouts[i].ExerciseReports.Max(e => e.CreatedOn) - workouts[i].ExerciseReports.Min(e => e.CreatedOn)).Value.TotalMinutes) 
                     : workouts[i].Duration;
-
+                
+                var coefficient = 0.0;
                 foreach (var exReport in workouts[i].ExerciseReports)
                 {
                     coefficient += exReport.Weight != 0 ? exReport.Weight * exReport.NumOfRepetitions : exReport.NumOfRepetitions;
@@ -494,6 +414,24 @@ namespace SportStats
                     Label = $"{GetHoursByMin(workoutDuration)}",
                     CenterLabel = true,
                 });
+                bars.Add(new Bar()
+                {
+                    FillColor = Colors.Red,
+                    Position = i,
+                    ValueBase = 0,
+                    Value = -workouts[i].AverageHeartRate / 10,
+                    Label = $"{workouts[i].AverageHeartRate}",
+                    CenterLabel = true,
+                });
+                bars.Add(new Bar()
+                {
+                    FillColor = Colors.LightGreen,
+                    Position = i,
+                    ValueBase = -workouts[i].AverageHeartRate / 10,
+                    Value = -workouts[i].Calories / 20,
+                    Label = $"{workouts[i].Calories}",
+                    CenterLabel = true,
+                });
                 var barPlot = myPlot.Add.Bars(bars);
                 barPlot.Horizontal = false;
             }
@@ -501,7 +439,7 @@ namespace SportStats
             myPlot.Axes.Margins(bottom: 0);
 
             var tickPositions = Generate.Consecutive(size);
-            var tickLabels = workouts.Select(x => $"{x.CreatedOn.ToString("dd MMMM", CultureInfo.CreateSpecificCulture("ru-RU"))}").ToArray();
+            var tickLabels = workouts.Select(x => DateTimeToString(x.CreatedOn)).ToArray();
 
             if (size > 8)
             {
@@ -535,6 +473,13 @@ namespace SportStats
             myPlot.Axes.Title.Label.Bold = true;
 
             return myPlot;
+        }
+
+        public static string DateTimeToString(DateTime date)
+        {
+            var res = date.ToString("dd MMMM", CultureInfo.CreateSpecificCulture("ru-RU"));
+            var indexSpace = res.IndexOf(' ');
+            return res.Substring(0, indexSpace + 4);
         }
 
         public static bool TryParseTime(string timeString, out int res)

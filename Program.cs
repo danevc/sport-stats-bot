@@ -102,6 +102,14 @@ async Task OnUpdate(Update update)
 
                 #region Тренировки
                 case "StartWorkoutExercise":
+                    var workout1 = new Workout
+                    {
+                        WorkoutId = Guid.NewGuid(),
+                        UserId = user.UserId
+                    };
+
+                    CacheHelper.SetCreateWorkout(_cache, user.UserId, workout1);
+
                     var exercises = db.Exercises.Where(e => e.UserId == user.UserId).ToList();
 
                     message = "Твои упражнения:\n\n";
@@ -110,7 +118,12 @@ async Task OnUpdate(Update update)
 
                     CacheHelper.SetTodayExercises(_cache, user.UserId, exercises);
                     await bot.AnswerCallbackQuery(query.Id);
-                    await bot.SendMessage(chatId, message, parseMode: ParseMode.Html);
+                    await bot.SendMessage(chatId,
+                        message,
+                        replyMarkup: new InlineKeyboardMarkup()
+                                .AddButton("Закончить тренировку", "EndWorkout")
+                                .AddButton("Отменить тренировку", "CancelWorkout"),
+                        parseMode: ParseMode.Html);
                     UserStateManager.SetState(user.UserId, State.WorkoutChooseExercise, _cache);
                     break;
 
@@ -144,7 +157,7 @@ async Task OnUpdate(Update update)
                     }
                     else
                     {
-                        var workout1 = new Workout
+                        workout1 = new Workout
                         {
                             WorkoutId = Guid.NewGuid(),
                             TrainingDayId = trainingDay.TrainingDayId,
@@ -162,7 +175,8 @@ async Task OnUpdate(Update update)
                         await bot.SendMessage(chatId, 
                             message,
                             replyMarkup: new InlineKeyboardMarkup()
-                                    .AddButton("Закончить тренировку", "EndWorkout"),
+                                .AddButton("Закончить тренировку", "EndWorkout")
+                                .AddButton("Отменить тренировку", "CancelWorkout"),
                             parseMode: ParseMode.Html);
                         UserStateManager.SetState(user.UserId, State.WorkoutChooseExercise, _cache);
                     }
@@ -189,12 +203,11 @@ async Task OnUpdate(Update update)
 
                 case "EndWriteExerciseReport":
                     exercises = CacheHelper.GetTodayExercises(_cache, user.UserId);
+                    var curExercise = CacheHelper.GetCurrentExercise(_cache, user.UserId);
                     var replyMarkup = ButtonsKit.GetBtnsInline(ButtonsInline.AddInfoWorkout, user.UserId, _cache);
 
                     if (exercises == null)
                         throw new Exception("exercises == null");
-                    
-                    var curExercise = CacheHelper.GetCurrentExercise(_cache, user.UserId);
 
                     if (curExercise == null)
                         throw new Exception("curExercise == null");
@@ -217,23 +230,48 @@ async Task OnUpdate(Update update)
                     UserStateManager.SetState(user.UserId, State.WorkoutChooseExercise, _cache);
                     break;
 
+                case "CancelWorkout":
+                    _cache = new MemoryCache(new MemoryCacheOptions());
+                    message = "<b>Привет!</b>";
+                    keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Start);
+
+                    await bot.AnswerCallbackQuery(query.Id);
+                    await bot.SendMessage(chatId,
+                        message,
+                        replyMarkup: keyboard,
+                        parseMode: ParseMode.Html);
+                    UserStateManager.SetState(user.UserId, State.None, _cache);
+                    break;
+
                 case "EndWorkout":
+                    var workoutInDb = db.Workouts.FirstOrDefault(e => e.CreatedOn.Date == DateTime.Now.Date);
                     var workout = CacheHelper.GetCreateWorkout(_cache, user.UserId);
 
-                    if (workout == null)
+                    if(workout is not null && workout.ExerciseReports.Count != 0)
                     {
-                        var exReport = CacheHelper.GetExerciseReport(_cache, user.UserId);
-                        db.ExerciseReports.AddRange(exReport.ToList());
-                        db.SaveChanges();
-                    }
-                    else
-                    {
-                        db.Workouts.Add(workout);
-                        db.SaveChanges();
+                        if (workoutInDb == null)
+                        {
+                            db.Workouts.Add(workout);
+                            db.SaveChanges();
+                        }
+                        else
+                        {
+                            if(workoutInDb.TrainingDayId == workout.TrainingDayId)
+                            {
+                                workoutInDb.AverageHeartRate = workout.AverageHeartRate;
+                                workoutInDb.Calories += workout.Calories;
+                                workoutInDb.Duration += workout.Duration;
+                                workoutInDb.ExerciseReports.AddRange(workout.ExerciseReports);
+                                db.SaveChanges();
+                            }
+                            else
+                            {
+                                db.Workouts.Add(workout);
+                                db.SaveChanges();
+                            }
+                        }
                     }
                     _cache = new MemoryCache(new MemoryCacheOptions());
-
-
                     message = "<b>Тренировка окончена</b>";
                     keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Start);
 
@@ -295,11 +333,10 @@ async Task OnUpdate(Update update)
                     break;
 
                 case "WorkoutStats":
-                    var exerciseIds = db.Exercises.Where(e => e.UserId == user.UserId).Select(e => e.ExerciseId).ToList();
-
-                    var workouts = db.ExerciseReports
-                        .Where(e => e.CreatedOn >= DateTime.Now.AddMonths(-2) && exerciseIds.Contains(e.ExerciseId))
-                        .GroupBy(e => e.CreatedOn.Value.Date).ToList();
+                    var workouts = db.Workouts
+                                .Include(e => e.ExerciseReports)
+                                .Where(e => e.CreatedOn >= DateTime.Now.AddMonths(-2) && e.UserId == user.UserId)
+                                .OrderBy(e => e.CreatedOn).ToList();
 
                     if (workouts is null)
                     {
@@ -307,7 +344,7 @@ async Task OnUpdate(Update update)
                         return;
                     }
 
-                    var plot = Utils.CreateBarWorkoutPlot(workouts.OrderBy(x => x.Key).ToList());
+                    var plot = Utils.CreateWorkoutPlot(workouts, "По тренировкам");
                     plot.SavePng("По тренировкам.png", 650, 500);
 
                     using (var fileStream = new FileStream("По тренировкам.png", FileMode.Open, FileAccess.Read))

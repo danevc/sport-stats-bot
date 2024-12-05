@@ -143,28 +143,6 @@ namespace SportStats
         }
         #endregion
 
-        #region ExerciseReport
-        public static void AddExerciseReport(IMemoryCache cache, long userId, ExerciseReport exReport)
-        {
-            var cacheKey = $"{userId}ExerciseReport";
-            var exerciseReportList = cache.Get<Stack<ExerciseReport>>(cacheKey) ?? new Stack<ExerciseReport>();
-            exerciseReportList.Push(exReport);
-            cache.Set(cacheKey, exerciseReportList);
-        }
-
-        public static Stack<ExerciseReport>? GetExerciseReport(IMemoryCache cache, long userId)
-        {
-            var cacheKey = $"{userId}ExerciseReport";
-            return cache.Get(cacheKey) as Stack<ExerciseReport>;
-        }
-
-        public static void RemoveExerciseReport(IMemoryCache cache, long userId)
-        {
-            var cacheKey = $"{userId}ExerciseReport";
-            cache.Remove(cacheKey);
-        }
-        #endregion
-
         #region CreateWorkout
         public static void SetCreateWorkout(IMemoryCache cache, long userId, Workout workout)
         {

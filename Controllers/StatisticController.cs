@@ -59,7 +59,7 @@ namespace SportStats.Controllers
                                         myStat_numOfRepetitions.Add(rep.NumOfRepetitions);
                                     }
 
-                                    var plot = Utils.CreateBarPlot(myStat_date, myStat_weight, myStat_numOfRepetitions, exercise.ExerciseName);
+                                    var plot = Utils.CreateExercisesPlot(myStat_date, myStat_weight, myStat_numOfRepetitions, exercise.ExerciseName);
 
                                     plot.SavePng($"{exercise.ExerciseId}.png", 650, 600);
 
@@ -121,7 +121,7 @@ namespace SportStats.Controllers
                                 return;
                             }
 
-                            var plot = Utils.CreateBarWorkoutPlot1(workouts.ToList(), trainingDay.TrainingDayName);
+                            var plot = Utils.CreateWorkoutPlot(workouts.ToList(), trainingDay.TrainingDayName);
                             plot.SavePng($"{trainingDay.TrainingDayId}.png", 650, 500);
 
                             using (var fileStream = new FileStream($"{trainingDay.TrainingDayId}.png", FileMode.Open, FileAccess.Read))
