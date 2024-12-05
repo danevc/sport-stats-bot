@@ -10,11 +10,26 @@ using Telegram.Bot.Types.ReplyMarkups;
 using SportStats.Models;
 using System;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+
+
+var _config = new ConfigurationBuilder()
+    .SetBasePath(Directory.GetCurrentDirectory())
+    .AddJsonFile("appsettings.json")
+    .Build();
+
+var isRelease = _config.GetValue<bool>("isRelease");
+var _token = "";
+
+if (isRelease)
+    _token = _config["Tokens:TG_TOKEN"];
+else
+    _token = _config["Tokens:TG_TOKEN_Dev"];
 
 IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
 Service _service = new Service();
 using var cts = new CancellationTokenSource();
-var bot = new TelegramBotClient("7602969726:AAHvO3euZ71LJJOHY0zgHLp-2YT29fMLpOo", cancellationToken: cts.Token);
+var bot = new TelegramBotClient(_token, cancellationToken: cts.Token);
 var me = await bot.GetMe();
 bot.OnError += OnError;
 bot.OnMessage += OnMessage;
@@ -30,7 +45,7 @@ async Task OnUpdate(Update update)
         if (query.Message == null)
             throw new Exception("query.Message == null");
 
-        using (var db = new SportContext())
+        using (var db = new SportContext(_config))
         {
             var user = db.Users.FirstOrDefault(e => e.UserId == query.From.Id);
 
@@ -419,7 +434,7 @@ async Task OnUpdate(Update update)
                     var schedule = CacheHelper.GetCreateSchedule(_cache, user.UserId);
                     if (schedule is null) break;
 
-                    var result = _service.EditOrCreateSchedule(schedule);
+                    var result = _service.EditOrCreateSchedule(schedule, _config);
                     user.CurrentScheduleId = schedule.ScheduleId;
                     db.SaveChanges();
 
@@ -453,7 +468,7 @@ async Task OnUpdate(Update update)
 
 async Task OnMessage(Message msg, UpdateType type)
 {
-    using (var db = new SportContext())
+    using (var db = new SportContext(_config))
     {
         var text = msg.Text ?? "";
 
@@ -479,9 +494,9 @@ async Task OnMessage(Message msg, UpdateType type)
         var state = UserStateManager.GetState(user.UserId);
 
         var stateRouter = new StateRouter(
-                new MainController(user, bot, msg.Chat, _cache, _service),
-                new WorkoutController(user, bot, msg.Chat, _cache, _service),
-                new StatisticController(user, bot, msg.Chat, _cache, _service));
+                new MainController(user, bot, msg.Chat, _cache, _service, _config),
+                new WorkoutController(user, bot, msg.Chat, _cache, _service, _config),
+                new StatisticController(user, bot, msg.Chat, _cache, _service, _config));
 
         if (text == "/start" || text == "Home")
         {

@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using SportStats.Interfaces;
 using SportStats.Models;
+using Microsoft.Extensions.Configuration;
 
 namespace SportStats
 {
@@ -13,14 +13,27 @@ namespace SportStats
         public DbSet<TrainingDay> TrainingDays { get; set; } = null!;
         public DbSet<Workout> Workouts { get; set; } = null!;
 
-        public SportContext() {
+        private readonly IConfiguration _configuration;
+        private readonly bool _isRelease;
+        private readonly string _connectionString;
+
+        public SportContext(IConfiguration configuration) {
+
+            _configuration = configuration;
+            _isRelease = _configuration.GetValue<bool>("isRelease");
+
+            if (_isRelease)
+                _connectionString = _configuration.GetConnectionString("SportStatsDB");
+            else
+                _connectionString = _configuration.GetConnectionString("SportStatsDB_Dev");
+
             //this.Database.EnsureDeleted();
             //this.Database.EnsureCreated();
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlServer(@"Server=LAPTOP-LMHEG0J6\SQLEXPRESS;Database=SportStats;Trusted_Connection=True;TrustServerCertificate=true;");
+            optionsBuilder.UseSqlServer(_connectionString);
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

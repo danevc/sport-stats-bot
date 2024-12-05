@@ -5,6 +5,7 @@ using static System.Net.Mime.MediaTypeNames;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using Telegram.Bot.Types;
+using Microsoft.Extensions.Configuration;
 
 namespace SportStats
 {
@@ -14,11 +15,11 @@ namespace SportStats
         /// Создать/изменить расписание
         /// </summary>
         /// <param name="schedule">Расписание</param>
-        public Models.ActionResult EditOrCreateSchedule(Schedule schedule)
+        public Models.ActionResult EditOrCreateSchedule(Schedule schedule, IConfigurationRoot config)
         {
             try
             {
-                using (var db = new SportContext())
+                using (var db = new SportContext(config))
                 {
                     var isCreate = true;
                     var existingSchedule = db.Schedules.Find(schedule.ScheduleId);
@@ -106,11 +107,11 @@ namespace SportStats
         /// Создать/изменить упражнение
         /// </summary>
         /// <param name="schedule">Упражнение</param>
-        public Models.ActionResult EditOrCreateExercise(Exercise exercise)
+        public Models.ActionResult EditOrCreateExercise(Exercise exercise, IConfigurationRoot config)
         {
             try
             {
-                using (var db = new SportContext())
+                using (var db = new SportContext(config))
                 {
                     var existingExercise = db.Exercises.Find(exercise.ExerciseId);
 

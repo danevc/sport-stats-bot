@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using SportStats.Enums;
 using SportStats.Interfaces;
 using SportStats.Models;
@@ -14,7 +15,7 @@ namespace SportStats.Controllers
 {
     public class WorkoutController : BaseController, IWorkout
     {
-        public WorkoutController(Models.User user, ITelegramBotClient bot, Chat chat, IMemoryCache cache, Service service) : base(user, bot, chat, cache, service) { }
+        public WorkoutController(Models.User user, ITelegramBotClient bot, Chat chat, IMemoryCache cache, Service service, IConfigurationRoot config) : base(user, bot, chat, cache, service, config) { }
 
         public async void DoExercise(string text)
         {
@@ -59,7 +60,7 @@ namespace SportStats.Controllers
 
                             approach++;
 
-                            using (var db = new SportContext())
+                            using (var db = new SportContext(_config))
                             {
                                 var maxCreatedOn = db.ExerciseReports
                                     .Where(e => e.ExerciseId == curExercise.ExerciseId && e.Approach == approach && e.CreatedOn < DateTime.Today)
@@ -98,7 +99,7 @@ namespace SportStats.Controllers
                 {
                     if(int.TryParse(text, out int num))
                     {
-                        using(var db = new SportContext())
+                        using(var db = new SportContext(_config))
                         {
                             var exercises = CacheHelper.GetTodayExercises(_cache, _user.UserId);
 
@@ -170,7 +171,7 @@ namespace SportStats.Controllers
                 {
                     if (int.TryParse(text, out int num))
                     {
-                        using (var db = new SportContext())
+                        using (var db = new SportContext(_config))
                         {
                             var trainingDay = db.TrainingDays
                                 .Include(e => e.Exercises)

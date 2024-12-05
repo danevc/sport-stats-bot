@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using SportStats.Enums;
 using SportStats.Interfaces;
 using SportStats.Models;
@@ -12,7 +13,7 @@ namespace SportStats.Controllers
 {
     public class MainController : BaseController, IMain 
     {
-        public MainController(Models.User user, ITelegramBotClient bot, Chat chat, IMemoryCache cache, Service service) : base(user, bot, chat, cache, service) { }
+        public MainController(Models.User user, ITelegramBotClient bot, Chat chat, IMemoryCache cache, Service service, IConfigurationRoot config) : base(user, bot, chat, cache, service, config) { }
 
         public async void Start(string text)
         {
@@ -36,14 +37,14 @@ namespace SportStats.Controllers
             {
                 if (!string.IsNullOrEmpty(text))
                 {
-                    using (var db = new SportContext())
+                    using (var db = new SportContext(_config))
                     {
                         var result = _service.EditOrCreateExercise(new Exercise
                         {
                             ExerciseId = Guid.NewGuid(),
                             ExerciseName = text.Trim(),
                             UserId = _user.UserId
-                        });
+                        }, _config);
 
                         var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).OrderBy(e => e.CreatedOn).Select(e => e.ExerciseName).ToList();
                         var message = "Твои упражнения:\n\n";
@@ -76,7 +77,7 @@ namespace SportStats.Controllers
             {
                 if (!string.IsNullOrEmpty(text))
                 {
-                    using (var db = new SportContext())
+                    using (var db = new SportContext(_config))
                     {
                         if (db.Schedules.Any(e => e.UserId == _user.UserId && e.ScheduleName == text))
                         {
@@ -145,7 +146,7 @@ namespace SportStats.Controllers
                         }
 
 
-                        using (var db = new SportContext())
+                        using (var db = new SportContext(_config))
                         {
                             var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).ToList();
 
@@ -193,7 +194,7 @@ namespace SportStats.Controllers
                         throw new Exception("trainingDay == null");
 
                     var message = "";
-                    using (var db = new SportContext())
+                    using (var db = new SportContext(_config))
                     {
                         if (text[0] == '*')
                         {
@@ -334,7 +335,7 @@ namespace SportStats.Controllers
                     schedule.DateFirstTrainingDay = dateFirstTrainDay;
                     var message = $"Для первого тренировочного дня установлена дата: {dateFirstTrainDay.Value.Date.ToString("dd MMMM", CultureInfo.CreateSpecificCulture("ru-RU"))}\n";
 
-                    using (var db = new SportContext())
+                    using (var db = new SportContext(_config))
                     {
                         var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).ToList();
 
@@ -366,7 +367,7 @@ namespace SportStats.Controllers
             {
                 if (!string.IsNullOrEmpty(text))
                 {
-                    using (var db = new SportContext())
+                    using (var db = new SportContext(_config))
                     {
                         var splitText = text.Replace(" ", "").Split(',');
                         var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).OrderBy(e => e.CreatedOn).ToList();
