@@ -11,7 +11,7 @@ using SportStats.Models;
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-
+using ScottPlot;
 
 var _config = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())
@@ -38,7 +38,7 @@ Console.WriteLine($"@{me.FirstName} started\nPress Enter to terminate");
 Console.ReadLine();
 cts.Cancel();
 
-async Task OnUpdate(Update update)
+async Task OnUpdate(Telegram.Bot.Types.Update update)
 {
     if (update is { CallbackQuery: { } query })
     {
@@ -266,6 +266,7 @@ async Task OnUpdate(Update update)
                     {
                         if (workoutInDb == null)
                         {
+                            workout.CreatedOn = new DateTime(2024, 12, 4);
                             db.Workouts.Add(workout);
                             db.SaveChanges();
                         }
@@ -358,14 +359,95 @@ async Task OnUpdate(Update update)
                         await bot.AnswerCallbackQuery(query.Id, "Тренировки не найдены");
                         return;
                     }
+                    var dates = new List<DateTime>();
+                    var bars1 = new List<PlotBarElem>();
+                    var bars2 = new List<PlotBarElem>();
+                    var coefBar = new List<double>();
+                    var durationBar = new List<double>();
+                    var heartRateBar = new List<double>();
+                    var caloriesBar = new List<double>();
 
-                    var plot = Utils.CreateWorkoutPlot(workouts, "По тренировкам");
-                    plot.SavePng("По тренировкам.png", 650, 500);
+                    var averageDuration = 0;
+                    var averageCalories = 0.0;
+                    var averageHeartRate = 0.0;
+                    var averageCoef = 0.0;
+
+                    foreach (var w in workouts)
+                    {
+                        dates.Add(w.CreatedOn);
+                        var coefficient = 0.0;
+                        foreach (var exReport in w.ExerciseReports)
+                        {
+                            coefficient += exReport.Weight != 0 ? exReport.Weight * exReport.NumOfRepetitions : exReport.NumOfRepetitions;
+                        }
+                        coefficient = Math.Round(coefficient / 250, 2);
+                        coefBar.Add(coefficient);
+
+                        var workoutDuration
+                            = w.Duration == 0
+                            ? Convert.ToInt32((w.ExerciseReports.Max(e => e.CreatedOn) - w.ExerciseReports.Min(e => e.CreatedOn)).Value.TotalMinutes)
+                            : w.Duration;
+
+                        averageDuration += workoutDuration;
+                        averageCalories += w.Calories;
+                        averageHeartRate += w.AverageHeartRate;
+                        averageCoef += coefficient;
+
+                        durationBar.Add(workoutDuration);
+                        heartRateBar.Add(w.AverageHeartRate);
+                        caloriesBar.Add(w.Calories);
+                    }
+
+                    averageDuration /= workouts.Count;
+                    averageCalories /= workouts.Where(e => e.Calories != 0).Count();
+                    averageHeartRate /= workouts.Where(e => e.AverageHeartRate != 0).Count();
+                    averageCoef /= workouts.Count;
+
+                    bars1.Add(new PlotBarElem
+                    {
+                        Values = coefBar,
+                        color = Colors.Tomato,
+                        Title = "Коэффициент",
+                        Type = BarPlotTypes.Number
+                    });
+                    bars1.Add(new PlotBarElem
+                    {
+                        Values = durationBar,
+                        color = Colors.LightBlue,
+                        Title = "Продолжительность тренировки",
+                        Type = BarPlotTypes.Time
+                    });
+                    bars2.Add(new PlotBarElem
+                    {
+                        Values = heartRateBar,
+                        color = Colors.Tomato,
+                        Title = "Средний пульс",
+                        Type = BarPlotTypes.Number
+                    });
+                    bars2.Add(new PlotBarElem
+                    {
+                        Values = caloriesBar,
+                        color = Colors.LightBlue,
+                        Title = "Калории",
+                        Type = BarPlotTypes.Number
+                    });
+
+
+                    var plot1 = Utils.CreateBarPlot1(dates, bars1, "По тренировкам");
+                    var plot2 = Utils.CreateBarPlot1(dates, bars2, $"Средние показатели:\nкалории: {Math.Round(averageCalories, 2)}, сердцебиение: {Math.Round(averageHeartRate, 2)}\nкоэфицеиент: {Math.Round(averageCoef, 2)}, длит. тренировки: {Utils.GetHoursByMin(averageDuration)}");
+                    plot2.Axes.Title.Label.ForeColor = Colors.Black;
+                    plot2.Axes.Title.Label.FontSize = 14;
+
+                    var multiplot = new Multiplot();
+                    multiplot.AddPlot(plot1);
+                    multiplot.AddPlot(plot2);
+
+                    multiplot.SavePng("По тренировкам.png", 650, 1100);
 
                     using (var fileStream = new FileStream("По тренировкам.png", FileMode.Open, FileAccess.Read))
                     {
                         await bot.AnswerCallbackQuery(query.Id);
-                        await bot.SendPhoto(chatId, photo: InputFile.FromStream(fileStream, "По тренировкам.png"));
+                        await bot.SendPhoto(chatId, photo: Telegram.Bot.Types.InputFile.FromStream(fileStream, "По тренировкам.png"));
                         message = "Результат по тренировкам⬆⬆⬆";
                         keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Start);
                         await bot.SendMessage(chatId, message, replyMarkup: keyboard, parseMode: ParseMode.Html);
@@ -468,6 +550,7 @@ async Task OnUpdate(Update update)
 
 async Task OnMessage(Message msg, UpdateType type)
 {
+
     using (var db = new SportContext(_config))
     {
         var text = msg.Text ?? "";
