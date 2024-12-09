@@ -318,7 +318,7 @@ namespace SportStats
         {
             var myPlot = new Plot();
 
-            var startIndex = dates.Count - 11;
+            var startIndex = dates.Count - 11 >= 0 ? dates.Count - 11 : 0;
 
             for (int i = startIndex; i < dates.Count; i++)
             {
@@ -386,88 +386,95 @@ namespace SportStats
             return myPlot;
         }
 
-
-        public static Plot CreateWorkoutPlot(List<Workout> workouts, string name)
+        public static Multiplot CreateWorkoutPlot(List<Workout> workouts, string name)
         {
-            var myPlot = new Plot();
+            var dates = new List<DateTime>();
+            var bars1 = new List<PlotBarElem>();
+            var bars2 = new List<PlotBarElem>();
 
-            int size = workouts.Count();
-            for (int i = 0; i < size; i++)
+            var coefBar = new List<double>();
+            var durationBar = new List<double>();
+            var heartRateBar = new List<double>();
+            var caloriesBar = new List<double>();
+
+            var averageDuration = 0;
+            var averageCalories = 0.0;
+            var averageHeartRate = 0.0;
+            var averageCoef = 0.0;
+
+            foreach (var w in workouts)
             {
-                var bars = new List<Bar>();
-
-                var workoutDuration
-                    = workouts[i].Duration == 0
-                    ? Convert.ToInt32((workouts[i].ExerciseReports.Max(e => e.CreatedOn) - workouts[i].ExerciseReports.Min(e => e.CreatedOn)).Value.TotalMinutes)
-                    : workouts[i].Duration;
-
+                dates.Add(w.CreatedOn);
                 var coefficient = 0.0;
-                foreach (var exReport in workouts[i].ExerciseReports)
+                foreach (var exReport in w.ExerciseReports)
                 {
                     coefficient += exReport.Weight != 0 ? exReport.Weight * exReport.NumOfRepetitions : exReport.NumOfRepetitions;
                 }
-                coefficient = Math.Round(coefficient / 400, 2);
+                coefficient = Math.Round(coefficient / 250, 2);
+                coefBar.Add(coefficient);
 
-                bars.Add(new Bar()
-                {
-                    FillColor = Colors.Tomato,
-                    Position = i,
-                    ValueBase = 0,
-                    Value = coefficient,
-                    Label = $"{coefficient}",
-                    CenterLabel = true,
-                });
-                bars.Add(new Bar()
-                {
-                    FillColor = Colors.LightBlue,
-                    Position = i,
-                    ValueBase = coefficient,
-                    Value = workoutDuration,
-                    Label = $"{GetHoursByMin(workoutDuration)}",
-                    CenterLabel = true,
-                });
-                var barPlot = myPlot.Add.Bars(bars);
-                barPlot.Horizontal = false;
+                var workoutDuration
+                    = w.Duration == 0
+                    ? Convert.ToInt32((w.ExerciseReports.Max(e => e.CreatedOn) - w.ExerciseReports.Min(e => e.CreatedOn)).Value.TotalMinutes)
+                    : w.Duration;
+
+                averageDuration += workoutDuration;
+                averageCalories += w.Calories;
+                averageHeartRate += w.AverageHeartRate;
+                averageCoef += coefficient;
+
+                durationBar.Add(workoutDuration);
+                heartRateBar.Add(w.AverageHeartRate);
+                caloriesBar.Add(w.Calories);
             }
 
-            myPlot.Axes.Margins(bottom: 0);
+            averageDuration /= workouts.Count;
+            averageCalories /= workouts.Where(e => e.Calories != 0).Count();
+            averageHeartRate /= workouts.Where(e => e.AverageHeartRate != 0).Count();
+            averageCoef /= workouts.Count;
 
-            var tickPositions = Generate.Consecutive(size);
-            var tickLabels = workouts.Select(x => DateTimeToString(x.CreatedOn)).ToArray();
-
-            if (size > 8)
+            bars1.Add(new PlotBarElem
             {
-                myPlot.Axes.Bottom.TickLabelStyle.Rotation = 30;
-                myPlot.Axes.Bottom.TickLabelStyle.Alignment = Alignment.MiddleLeft;
-            }
-
-            var item1 = new LegendItem()
+                Values = coefBar,
+                color = Colors.Tomato,
+                Title = "Коэффициент",
+                Type = BarPlotTypes.Number
+            });
+            bars1.Add(new PlotBarElem
             {
-                LabelText = "Длительность тренировки",
-                FillColor = Colors.LightBlue
-            };
-            var item2 = new LegendItem()
+                Values = durationBar,
+                color = Colors.LightBlue,
+                Title = "Продолжительность тренировки",
+                Type = BarPlotTypes.Time
+            });
+            bars2.Add(new PlotBarElem
             {
-                LabelText = "Эффективность",
-                FillColor = Colors.Tomato
-            };
+                Values = heartRateBar,
+                color = Colors.Tomato,
+                Title = "Средний пульс",
+                Type = BarPlotTypes.Number
+            });
+            bars2.Add(new PlotBarElem
+            {
+                Values = caloriesBar,
+                color = Colors.LightBlue,
+                Title = "Калории",
+                Type = BarPlotTypes.Number
+            });
 
-            var padding = new PixelPadding(30, 30, 100, 100);
 
-            myPlot.Legend.ManualItems.Add(item1);
-            myPlot.Legend.ManualItems.Add(item2);
-            myPlot.Axes.Bottom.SetTicks(tickPositions, tickLabels);
-            myPlot.HideGrid();
-            myPlot.Legend.Orientation = Orientation.Horizontal;
-            myPlot.ShowLegend(Edge.Bottom);
-            myPlot.Layout.Fixed(padding);
-            myPlot.Axes.Title.Label.Text = name;
-            myPlot.Axes.Title.Label.ForeColor = Colors.DarkRed;
-            myPlot.Axes.Title.Label.FontSize = 32;
-            myPlot.Axes.Title.Label.Bold = true;
+            var plot1 = CreateBarPlot(dates, bars1, name);
+            var plot2 = CreateBarPlot(dates, bars2, $"Средние показатели:\nкалории: {Math.Round(averageCalories, 2)}\nсердцебиение: {Math.Round(averageHeartRate, 2)}\nкоэфицеиент: {Math.Round(averageCoef, 2)}\nдлительность: {Utils.GetHoursByMin(averageDuration, false)}");
+            plot2.Axes.Title.Label.ForeColor = Colors.Black;
+            plot2.Axes.Title.Label.FontSize = 12;
+            plot2.Axes.Title.Label.Alignment = Alignment.LowerLeft;
+            plot2.Axes.Title.Label.OffsetX = -300;
 
-            return myPlot;
+            var multiplot = new Multiplot();
+            multiplot.AddPlot(plot1);
+            multiplot.AddPlot(plot2);
+
+            return multiplot;
         }
-
     }
 }
