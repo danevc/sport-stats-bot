@@ -291,13 +291,20 @@ namespace SportStats
             return message;
         }
 
-        public static string GetHoursByMin(int mins)
+        public static string GetHoursByMin(int mins, bool lineBreak = true)
         {
             string hoursString;
             int hours = mins / 60;
             if (hours > 0)
             {
-                hoursString = $"{hours}ч\n{mins - hours * 60}мин";
+                if (lineBreak)
+                {
+                    hoursString = $"{hours}ч\n{mins - hours * 60}мин";
+                }
+                else
+                {
+                    hoursString = $"{hours}ч {mins - hours * 60}мин";
+                }
             }
             else
             {
@@ -307,121 +314,13 @@ namespace SportStats
             return hoursString;
         }
 
-        public static Plot CreateBarPlot(List<DateTime> dates, List<double> FirstPlot, List<double> SecondPlot, string Title = "", string firstTitle = "", string secondTitle = "")
-        {
-            var myPlot = new Plot();
-            var size = dates.Count();
-
-            for (int i = 0; i < size; i++)
-            {
-                var bars = new List<Bar>();
-                var h1 = FirstPlot[i];
-                var h2 = SecondPlot[i];
-
-                var firstBarNum = h2;
-                var secondBarNum = h1;
-                var colorFirst = Colors.LightBlue;
-                var colorSecond = Colors.Tomato;
-                var firstBarLabel = $"{firstBarNum}";
-                var secondBarLabel = $"{secondBarNum}";
-
-                if (h1 < h2)
-                {
-                    firstBarNum = h1;
-                    secondBarNum = h2;
-                    colorFirst = Colors.Tomato;
-                    colorSecond = Colors.LightBlue;
-                    firstBarLabel = $"{firstBarNum}";
-                    secondBarLabel = $"{secondBarNum}";
-                }
-
-                if (h1 == h2)
-                {
-                    firstBarLabel = $"{secondBarNum} = {firstBarNum}";
-                    secondBarLabel = "";
-                }
-
-                var barFirst = new Bar()
-                {
-                    FillColor = colorFirst,
-                    Position = i,
-                    ValueBase = 0,
-                    Value = firstBarNum,
-                    CenterLabel = true,
-
-                };
-                var barSecond = new Bar()
-                {
-                    FillColor = colorSecond,
-                    Position = i,
-                    ValueBase = firstBarNum,
-                    Value = secondBarNum,
-                    CenterLabel = true,
-                };
-                if (firstBarNum != 0) barFirst.Label = firstBarLabel;
-                if (secondBarNum != 0) barSecond.Label = secondBarLabel;
-
-                bars.Add(barFirst);
-                bars.Add(barSecond);
-
-                var barPlot = myPlot.Add.Bars(bars);
-                barPlot.Horizontal = false;
-            }
-
-            myPlot.Axes.Margins(bottom: 0);
-
-            var tickPositions = Generate.Consecutive(size);
-            var tickLabels = dates.Select(x => DateTimeToString(x)).ToArray();
-            if (size > 8)
-            {
-                myPlot.Axes.Bottom.TickLabelStyle.Rotation = 30;
-                myPlot.Axes.Bottom.TickLabelStyle.Alignment = Alignment.MiddleLeft;
-            }
-
-            if (!Title.IsNullOrEmpty())
-            {
-                myPlot.Axes.Title.Label.Text = Title;
-            }
-
-            if (!firstTitle.IsNullOrEmpty())
-            {
-                var item = new LegendItem()
-                {
-                    LabelText = firstTitle,
-                    FillColor = Colors.Tomato
-                };
-                myPlot.Legend.ManualItems.Add(item);
-            }
-
-            if (!secondTitle.IsNullOrEmpty())
-            {
-                var item = new LegendItem()
-                {
-                    LabelText = secondTitle,
-                    FillColor = Colors.LightBlue
-                };
-                myPlot.Legend.ManualItems.Add(item);
-            }
-
-            var padding = new PixelPadding(30, 30, 100, 100);
-
-            myPlot.Axes.Bottom.SetTicks(tickPositions, tickLabels);
-            myPlot.HideGrid();
-            myPlot.Legend.Orientation = Orientation.Horizontal;
-            myPlot.ShowLegend(Edge.Bottom);
-            myPlot.Layout.Fixed(padding);
-            myPlot.Axes.Title.Label.ForeColor = Colors.DarkRed;
-            myPlot.Axes.Title.Label.FontSize = 32;
-            myPlot.Axes.Title.Label.Bold = true;
-
-            return myPlot;
-        }
-
-        public static Plot CreateBarPlot1(List<DateTime> dates, List<PlotBarElem> barsInfo, string Title = "")
+        public static Plot CreateBarPlot(List<DateTime> dates, List<PlotBarElem> barsInfo, string Title = "")
         {
             var myPlot = new Plot();
 
-            for (int i = 0; i < dates.Count; i++)
+            var startIndex = dates.Count - 11;
+
+            for (int i = startIndex; i < dates.Count; i++)
             {
                 var bars = new List<Bar>();
 

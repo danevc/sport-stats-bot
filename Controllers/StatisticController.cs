@@ -76,7 +76,7 @@ namespace SportStats.Controllers
                                         Type = BarPlotTypes.Number
                                     });
 
-                                    var plot = Utils.CreateBarPlot1(myStat_date, bars, exercise.ExerciseName);
+                                    var plot = Utils.CreateBarPlot(myStat_date, bars, exercise.ExerciseName);
 
                                     plot.SavePng($"{exercise.ExerciseId}.png", 650, 600);
 
@@ -211,11 +211,12 @@ namespace SportStats.Controllers
                                 Type = BarPlotTypes.Number
                             });
 
-
-                            var plot1 = Utils.CreateBarPlot1(dates, bars1, "По тренировкам");
-                            var plot2 = Utils.CreateBarPlot1(dates, bars2, $"Средние показатели:\nкалории: {Math.Round(averageCalories, 2)}, сердцебиение: {Math.Round(averageHeartRate, 2)}\nкоэфицеиент: {Math.Round(averageCoef, 2)}, длит. тренировки: {Utils.GetHoursByMin(averageDuration)}");
+                            var plot1 = Utils.CreateBarPlot(dates, bars1, trainingDay.TrainingDayName ?? "");
+                            var plot2 = Utils.CreateBarPlot(dates, bars2, $"Средние показатели:\nкалории: {Math.Round(averageCalories, 2)}\nсердцебиение: {Math.Round(averageHeartRate, 2)}\nкоэфицеиент: {Math.Round(averageCoef, 2)}\nдлительность: {Utils.GetHoursByMin(averageDuration, false)}");
                             plot2.Axes.Title.Label.ForeColor = Colors.Black;
-                            plot2.Axes.Title.Label.FontSize = 14;
+                            plot2.Axes.Title.Label.FontSize = 12;
+                            plot2.Axes.Title.Label.Alignment = Alignment.LowerLeft;
+                            plot2.Axes.Title.Label.OffsetX = -300;
 
                             var multiplot = new Multiplot();
                             multiplot.AddPlot(plot1);

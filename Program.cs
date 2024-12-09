@@ -433,10 +433,12 @@ async Task OnUpdate(Telegram.Bot.Types.Update update)
                     });
 
 
-                    var plot1 = Utils.CreateBarPlot1(dates, bars1, "По тренировкам");
-                    var plot2 = Utils.CreateBarPlot1(dates, bars2, $"Средние показатели:\nкалории: {Math.Round(averageCalories, 2)}, сердцебиение: {Math.Round(averageHeartRate, 2)}\nкоэфицеиент: {Math.Round(averageCoef, 2)}, длит. тренировки: {Utils.GetHoursByMin(averageDuration)}");
+                    var plot1 = Utils.CreateBarPlot(dates, bars1, "По тренировкам");
+                    var plot2 = Utils.CreateBarPlot(dates, bars2, $"Средние показатели:\nкалории: {Math.Round(averageCalories, 2)}\nсердцебиение: {Math.Round(averageHeartRate, 2)}\nкоэфицеиент: {Math.Round(averageCoef, 2)}\nдлительность: {Utils.GetHoursByMin(averageDuration, false)}");
                     plot2.Axes.Title.Label.ForeColor = Colors.Black;
-                    plot2.Axes.Title.Label.FontSize = 14;
+                    plot2.Axes.Title.Label.FontSize = 12;
+                    plot2.Axes.Title.Label.Alignment = Alignment.LowerLeft;
+                    plot2.Axes.Title.Label.OffsetX = -300;
 
                     var multiplot = new Multiplot();
                     multiplot.AddPlot(plot1);
