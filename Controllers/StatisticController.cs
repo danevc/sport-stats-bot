@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
+using ScottPlot;
 using SportStats.Enums;
 using SportStats.Interfaces;
 using SportStats.Models;
@@ -38,20 +39,21 @@ namespace SportStats.Controllers
                                     throw new Exception("exercise is null");
 
                                 var reports = db.ExerciseReports
-                                    .Where(e => e.ExerciseId == exercise.ExerciseId && e.CreatedOn >= DateTime.Now.AddMonths(-2));
+                                    .Where(e => e.ExerciseId == exercise.ExerciseId && e.CreatedOn >= DateTime.Now.AddMonths(-2)).ToList();
 
                                 if (reports != null)
                                 {
                                     var myStat_date = new List<DateTime>();
-                                    var myStat_weight = new List<int>();
-                                    var myStat_numOfRepetitions = new List<int>();
+                                    var myStat_weight = new List<double>();
+                                    var myStat_numOfRepetitions = new List<double>();
+                                    var bars = new List<PlotBarElem>();
+                                    var uniqueReports = reports.GroupBy(e => e.CreatedOn.Value.Date)
+                                        .Select(group => group.OrderByDescending(report => report.Weight)
+                                            .ThenByDescending(report => report.NumOfRepetitions)
+                                            .First()
+                                    ).ToList();
 
-                                    var uniqueReports = reports.GroupBy(e => e.CreatedOn).Select(group => group.OrderByDescending(report => report.Weight)
-                                           .ThenByDescending(report => report.NumOfRepetitions)
-                                           .First()
-                                    );
-
-                                    foreach (var rep in uniqueReports)
+                                    foreach (var rep in uniqueReports.OrderBy(e => e.CreatedOn))
                                     {
                                         if (rep.CreatedOn is null)
                                             break;
@@ -59,8 +61,22 @@ namespace SportStats.Controllers
                                         myStat_weight.Add(rep.Weight);
                                         myStat_numOfRepetitions.Add(rep.NumOfRepetitions);
                                     }
+                                    bars.Add(new PlotBarElem
+                                    {
+                                        Values = myStat_weight,
+                                        color = Colors.Tomato,
+                                        Title = "weight",
+                                        Type = BarPlotTypes.Number
+                                    });
+                                    bars.Add(new PlotBarElem
+                                    {
+                                        Values = myStat_numOfRepetitions,
+                                        color = Colors.LightBlue,
+                                        Title = "numOfRepetitions",
+                                        Type = BarPlotTypes.Number
+                                    });
 
-                                    var plot = Utils.CreateExercisesPlot(myStat_date, myStat_weight, myStat_numOfRepetitions, exercise.ExerciseName);
+                                    var plot = Utils.CreateBarPlot1(myStat_date, bars, exercise.ExerciseName);
 
                                     plot.SavePng($"{exercise.ExerciseId}.png", 650, 600);
 
@@ -122,8 +138,90 @@ namespace SportStats.Controllers
                                 return;
                             }
 
-                            var plot = Utils.CreateWorkoutPlot(workouts.ToList(), trainingDay.TrainingDayName);
-                            plot.SavePng($"{trainingDay.TrainingDayId}.png", 650, 500);
+                            var dates = new List<DateTime>();
+                            var bars1 = new List<PlotBarElem>();
+                            var bars2 = new List<PlotBarElem>();
+                            var coefBar = new List<double>();
+                            var durationBar = new List<double>();
+                            var heartRateBar = new List<double>();
+                            var caloriesBar = new List<double>();
+
+                            var averageDuration = 0;
+                            var averageCalories = 0.0;
+                            var averageHeartRate = 0.0;
+                            var averageCoef = 0.0;
+
+                            foreach (var w in workouts)
+                            {
+                                dates.Add(w.CreatedOn);
+                                var coefficient = 0.0;
+                                foreach (var exReport in w.ExerciseReports)
+                                {
+                                    coefficient += exReport.Weight != 0 ? exReport.Weight * exReport.NumOfRepetitions : exReport.NumOfRepetitions;
+                                }
+                                coefficient = Math.Round(coefficient / 250, 2);
+                                coefBar.Add(coefficient);
+
+                                var workoutDuration
+                                    = w.Duration == 0
+                                    ? Convert.ToInt32((w.ExerciseReports.Max(e => e.CreatedOn) - w.ExerciseReports.Min(e => e.CreatedOn)).Value.TotalMinutes)
+                                    : w.Duration;
+
+                                averageDuration += workoutDuration;
+                                averageCalories += w.Calories;
+                                averageHeartRate += w.AverageHeartRate;
+                                averageCoef += coefficient;
+
+                                durationBar.Add(workoutDuration);
+                                heartRateBar.Add(w.AverageHeartRate);
+                                caloriesBar.Add(w.Calories);
+                            }
+
+                            averageDuration /= workouts.Count;
+                            averageCalories /= workouts.Where(e => e.Calories != 0).Count();
+                            averageHeartRate /= workouts.Where(e => e.AverageHeartRate != 0).Count();
+                            averageCoef /= workouts.Count;
+
+                            bars1.Add(new PlotBarElem
+                            {
+                                Values = coefBar,
+                                color = Colors.Tomato,
+                                Title = "Коэффициент",
+                                Type = BarPlotTypes.Number
+                            });
+                            bars1.Add(new PlotBarElem
+                            {
+                                Values = durationBar,
+                                color = Colors.LightBlue,
+                                Title = "Продолжительность тренировки",
+                                Type = BarPlotTypes.Time
+                            });
+                            bars2.Add(new PlotBarElem
+                            {
+                                Values = heartRateBar,
+                                color = Colors.Tomato,
+                                Title = "Средний пульс",
+                                Type = BarPlotTypes.Number
+                            });
+                            bars2.Add(new PlotBarElem
+                            {
+                                Values = caloriesBar,
+                                color = Colors.LightBlue,
+                                Title = "Калории",
+                                Type = BarPlotTypes.Number
+                            });
+
+
+                            var plot1 = Utils.CreateBarPlot1(dates, bars1, "По тренировкам");
+                            var plot2 = Utils.CreateBarPlot1(dates, bars2, $"Средние показатели:\nкалории: {Math.Round(averageCalories, 2)}, сердцебиение: {Math.Round(averageHeartRate, 2)}\nкоэфицеиент: {Math.Round(averageCoef, 2)}, длит. тренировки: {Utils.GetHoursByMin(averageDuration)}");
+                            plot2.Axes.Title.Label.ForeColor = Colors.Black;
+                            plot2.Axes.Title.Label.FontSize = 14;
+
+                            var multiplot = new Multiplot();
+                            multiplot.AddPlot(plot1);
+                            multiplot.AddPlot(plot2);
+
+                            multiplot.SavePng($"{trainingDay.TrainingDayId}.png", 650, 1100);
 
                             using (var fileStream = new FileStream($"{trainingDay.TrainingDayId}.png", FileMode.Open, FileAccess.Read))
                             {

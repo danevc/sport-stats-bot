@@ -1,8 +1,7 @@
-﻿using ScottPlot;
-using ScottPlot.TickGenerators.TimeUnits;
+﻿using Microsoft.IdentityModel.Tokens;
+using ScottPlot;
 using SportStats.Enums;
 using SportStats.Models;
-using System.ComponentModel;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -189,6 +188,43 @@ namespace SportStats
             }
         }
 
+        public static string DateTimeToString(DateTime date)
+        {
+            var res = date.ToString("dd MMMM", CultureInfo.CreateSpecificCulture("ru-RU"));
+            var indexSpace = res.IndexOf(' ');
+            return res.Substring(0, indexSpace + 4);
+        }
+
+        public static bool TryParseTime(string timeString, out int res)
+        {
+            var match = Regex.Match(timeString, @"(\d+)ч(\d+)мин|(\d+)мин(\d+)ч");
+
+            if (match.Success)
+            {
+                int hours = 0;
+                int minutes = 0;
+
+                if (match.Groups[1].Success)
+                {
+                    hours = int.Parse(match.Groups[1].Value);
+                    minutes = int.Parse(match.Groups[2].Value);
+                }
+                else
+                {
+                    hours = int.Parse(match.Groups[4].Value);
+                    minutes = int.Parse(match.Groups[3].Value);
+
+                }
+                res = hours * 60 + minutes;
+                return true;
+            }
+            else
+            {
+                res = 0;
+                return false;
+            }
+        }
+        
         public static DateTime? ParseDate(string text)
         {
             var month = 0;
@@ -199,7 +235,7 @@ namespace SportStats
             {
                 if (int.TryParse(splitText[1], out int num2))
                 {
-                    if(num2 > 0 && num2 < 13)
+                    if (num2 > 0 && num2 < 13)
                     {
                         month = num2;
                     }
@@ -215,7 +251,7 @@ namespace SportStats
 
                 if (int.TryParse(splitText[0], out int day))
                 {
-                    if(month != 0 && year != 0)
+                    if (month != 0 && year != 0)
                     {
                         if (day <= DateTime.DaysInMonth(year, month))
                         {
@@ -229,9 +265,9 @@ namespace SportStats
 
         public static string GetStringSchedule(Schedule schedule)
         {
-            if (schedule == null) 
+            if (schedule == null)
                 throw new Exception("GetStringSchedule || schedule == null");
-            
+
             var message = "";
             var restDays = 0;
 
@@ -250,7 +286,7 @@ namespace SportStats
                 }
                 restDays += day.RestDaysAfter + 1;
             }
-            
+
 
             return message;
         }
@@ -271,7 +307,7 @@ namespace SportStats
             return hoursString;
         }
 
-        public static Plot CreateExercisesPlot(List<DateTime> dates, List<int> FirstPlot, List<int> SecondPlot, string Title = "Без названия")
+        public static Plot CreateBarPlot(List<DateTime> dates, List<double> FirstPlot, List<double> SecondPlot, string Title = "", string firstTitle = "", string secondTitle = "")
         {
             var myPlot = new Plot();
             var size = dates.Count();
@@ -279,27 +315,27 @@ namespace SportStats
             for (int i = 0; i < size; i++)
             {
                 var bars = new List<Bar>();
-                var hWeight = FirstPlot[i];
-                var hNum = SecondPlot[i];
+                var h1 = FirstPlot[i];
+                var h2 = SecondPlot[i];
 
-                var firstBarNum = hNum;
-                var secondBarNum = hWeight;
+                var firstBarNum = h2;
+                var secondBarNum = h1;
                 var colorFirst = Colors.LightBlue;
                 var colorSecond = Colors.Tomato;
                 var firstBarLabel = $"{firstBarNum}";
                 var secondBarLabel = $"{secondBarNum}";
 
-                if (hWeight < hNum)
+                if (h1 < h2)
                 {
-                    firstBarNum = hWeight;
-                    secondBarNum = hNum;
+                    firstBarNum = h1;
+                    secondBarNum = h2;
                     colorFirst = Colors.Tomato;
                     colorSecond = Colors.LightBlue;
                     firstBarLabel = $"{firstBarNum}";
                     secondBarLabel = $"{secondBarNum}";
                 }
 
-                if (hWeight == hNum)
+                if (h1 == h2)
                 {
                     firstBarLabel = $"{secondBarNum} = {firstBarNum}";
                     secondBarLabel = "";
@@ -311,7 +347,6 @@ namespace SportStats
                     Position = i,
                     ValueBase = 0,
                     Value = firstBarNum,
-                    Label = firstBarLabel,
                     CenterLabel = true,
 
                 };
@@ -321,9 +356,10 @@ namespace SportStats
                     Position = i,
                     ValueBase = firstBarNum,
                     Value = secondBarNum,
-                    Label = secondBarLabel,
                     CenterLabel = true,
                 };
+                if (firstBarNum != 0) barFirst.Label = firstBarLabel;
+                if (secondBarNum != 0) barSecond.Label = secondBarLabel;
 
                 bars.Add(barFirst);
                 bars.Add(barSecond);
@@ -335,30 +371,112 @@ namespace SportStats
             myPlot.Axes.Margins(bottom: 0);
 
             var tickPositions = Generate.Consecutive(size);
-            var tickLabels = dates.Select(x => $"{x.ToString("dd MMMM", CultureInfo.CreateSpecificCulture("ru-RU"))}").ToArray();
+            var tickLabels = dates.Select(x => DateTimeToString(x)).ToArray();
             if (size > 8)
             {
                 myPlot.Axes.Bottom.TickLabelStyle.Rotation = 30;
                 myPlot.Axes.Bottom.TickLabelStyle.Alignment = Alignment.MiddleLeft;
             }
 
-            var item1 = new LegendItem()
+            if (!Title.IsNullOrEmpty())
             {
-                LabelText = "Вес",
-                FillColor = Colors.Tomato
-            };
-            var item2 = new LegendItem()
+                myPlot.Axes.Title.Label.Text = Title;
+            }
+
+            if (!firstTitle.IsNullOrEmpty())
             {
-                LabelText = "Повторений",
-                FillColor = Colors.LightBlue
-            };
+                var item = new LegendItem()
+                {
+                    LabelText = firstTitle,
+                    FillColor = Colors.Tomato
+                };
+                myPlot.Legend.ManualItems.Add(item);
+            }
+
+            if (!secondTitle.IsNullOrEmpty())
+            {
+                var item = new LegendItem()
+                {
+                    LabelText = secondTitle,
+                    FillColor = Colors.LightBlue
+                };
+                myPlot.Legend.ManualItems.Add(item);
+            }
 
             var padding = new PixelPadding(30, 30, 100, 100);
 
             myPlot.Axes.Bottom.SetTicks(tickPositions, tickLabels);
             myPlot.HideGrid();
-            myPlot.Legend.ManualItems.Add(item1);
-            myPlot.Legend.ManualItems.Add(item2);
+            myPlot.Legend.Orientation = Orientation.Horizontal;
+            myPlot.ShowLegend(Edge.Bottom);
+            myPlot.Layout.Fixed(padding);
+            myPlot.Axes.Title.Label.ForeColor = Colors.DarkRed;
+            myPlot.Axes.Title.Label.FontSize = 32;
+            myPlot.Axes.Title.Label.Bold = true;
+
+            return myPlot;
+        }
+
+        public static Plot CreateBarPlot1(List<DateTime> dates, List<PlotBarElem> barsInfo, string Title = "")
+        {
+            var myPlot = new Plot();
+
+            for (int i = 0; i < dates.Count; i++)
+            {
+                var bars = new List<Bar>();
+
+                var valueBase = 0.0;
+                foreach (var barInfo in barsInfo.OrderBy(e => e.Values[i]))
+                {
+                    var label = $"{barInfo.Values[i]}";
+
+                    if (barInfo.Type == BarPlotTypes.Time)
+                        label = GetHoursByMin(Convert.ToInt32(barInfo.Values[i]));
+                    
+                    bars.Add(new Bar
+                    {
+                        FillColor = barInfo.color,
+                        Position = i,
+                        ValueBase = valueBase,
+                        Value = barInfo.Values[i],
+                        Label = label,
+                        CenterLabel = true
+                    });
+                    valueBase = barInfo.Values[i];
+                }
+
+                var barPlot = myPlot.Add.Bars(bars);
+                barPlot.Horizontal = false;
+            }
+
+            foreach(var barInfo in barsInfo)
+            {
+                myPlot.Legend.ManualItems.Add(new LegendItem
+                {
+                    LabelText = barInfo.Title ?? "",
+                    FillColor = barInfo.color
+                });
+            }
+
+            myPlot.Axes.Margins(bottom: 0);
+
+            var tickPositions = Generate.Consecutive(dates.Count);
+            var tickLabels = dates.Select(x => DateTimeToString(x)).ToArray();
+
+            if (dates.Count > 10)
+            {
+                myPlot.Axes.Bottom.TickLabelStyle.Rotation = 30;
+                myPlot.Axes.Bottom.TickLabelStyle.Alignment = Alignment.MiddleLeft;
+            }
+
+            if (!Title.IsNullOrEmpty())
+            {
+                myPlot.Axes.Title.Label.Text = Title;
+            }
+
+            var padding = new PixelPadding(30, 30, 100, 100);
+            myPlot.Axes.Bottom.SetTicks(tickPositions, tickLabels);
+            myPlot.HideGrid();
             myPlot.Legend.Orientation = Orientation.Horizontal;
             myPlot.ShowLegend(Edge.Bottom);
             myPlot.Layout.Fixed(padding);
@@ -366,9 +484,9 @@ namespace SportStats
             myPlot.Axes.Title.Label.ForeColor = Colors.DarkRed;
             myPlot.Axes.Title.Label.FontSize = 32;
             myPlot.Axes.Title.Label.Bold = true;
-
             return myPlot;
         }
+
 
         public static Plot CreateWorkoutPlot(List<Workout> workouts, string name)
         {
@@ -379,11 +497,11 @@ namespace SportStats
             {
                 var bars = new List<Bar>();
 
-                var workoutDuration 
-                    = workouts[i].Duration == 0 
-                    ? Convert.ToInt32((workouts[i].ExerciseReports.Max(e => e.CreatedOn) - workouts[i].ExerciseReports.Min(e => e.CreatedOn)).Value.TotalMinutes) 
+                var workoutDuration
+                    = workouts[i].Duration == 0
+                    ? Convert.ToInt32((workouts[i].ExerciseReports.Max(e => e.CreatedOn) - workouts[i].ExerciseReports.Min(e => e.CreatedOn)).Value.TotalMinutes)
                     : workouts[i].Duration;
-                
+
                 var coefficient = 0.0;
                 foreach (var exReport in workouts[i].ExerciseReports)
                 {
@@ -407,24 +525,6 @@ namespace SportStats
                     ValueBase = coefficient,
                     Value = workoutDuration,
                     Label = $"{GetHoursByMin(workoutDuration)}",
-                    CenterLabel = true,
-                });
-                bars.Add(new Bar()
-                {
-                    FillColor = Colors.Red,
-                    Position = i,
-                    ValueBase = 0,
-                    Value = -workouts[i].AverageHeartRate / 10,
-                    Label = $"{workouts[i].AverageHeartRate}",
-                    CenterLabel = true,
-                });
-                bars.Add(new Bar()
-                {
-                    FillColor = Colors.LightGreen,
-                    Position = i,
-                    ValueBase = -workouts[i].AverageHeartRate / 10,
-                    Value = -workouts[i].Calories / 20,
-                    Label = $"{workouts[i].Calories}",
                     CenterLabel = true,
                 });
                 var barPlot = myPlot.Add.Bars(bars);
@@ -470,41 +570,5 @@ namespace SportStats
             return myPlot;
         }
 
-        public static string DateTimeToString(DateTime date)
-        {
-            var res = date.ToString("dd MMMM", CultureInfo.CreateSpecificCulture("ru-RU"));
-            var indexSpace = res.IndexOf(' ');
-            return res.Substring(0, indexSpace + 4);
-        }
-
-        public static bool TryParseTime(string timeString, out int res)
-        {
-            var match = Regex.Match(timeString, @"(\d+)ч(\d+)мин|(\d+)мин(\d+)ч");
-
-            if (match.Success)
-            {
-                int hours = 0;
-                int minutes = 0;
-
-                if (match.Groups[1].Success)
-                {
-                    hours = int.Parse(match.Groups[1].Value);
-                    minutes = int.Parse(match.Groups[2].Value);
-                }
-                else
-                {
-                    hours = int.Parse(match.Groups[4].Value);
-                    minutes = int.Parse(match.Groups[3].Value);
-
-                }
-                res = hours * 60 + minutes;
-                return true;
-            }
-            else
-            {
-                res = 0;
-                return false;
-            }
-        }
     }
 }

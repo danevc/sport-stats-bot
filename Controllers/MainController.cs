@@ -19,10 +19,26 @@ namespace SportStats.Controllers
         {
             try
             {
-                var message = "<b>Привет!</b>✌";
-                var keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Start, _user.UserId);
-                await _bot.SendMessage(_chat.Id, message, replyMarkup: keyboard, parseMode: ParseMode.Html);
-                UserStateManager.SetState(_user.UserId, State.None, _cache);
+                using (var db = new SportContext(_config))
+                {
+                    if (db.Exercises.Any(e => e.UserId == _user.UserId))
+                    {
+                        var message = "<b>Привет!</b>✌";
+                        var keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Start, _user.UserId);
+                        await _bot.SendMessage(_chat.Id, message, replyMarkup: keyboard, parseMode: ParseMode.Html);
+                        UserStateManager.SetState(_user.UserId, State.None, _cache);
+                    }
+                    else
+                    {
+                        var message = "<b>Привет!</b>✌\nДобавь упражнения";
+                        var keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Start, _user.UserId);
+                        await _bot.SendMessage(_chat.Id,
+                            message,
+                            replyMarkup: new InlineKeyboardMarkup()
+                                .AddButton("Добавить", "AddExercises"),
+                            parseMode: ParseMode.Html);
+                    }
+                }
             }
             catch (Exception ex)
             {
