@@ -51,5 +51,11 @@ namespace SportStats.Interfaces
         /// </summary>
         /// <param name="text">Порядковый номер упражнения</param>
         void RemoveExercise(string text);
+
+        /// <summary>
+        /// Назначить основное расписание
+        /// </summary>
+        /// <param name="text">Порядковый номер расписания</param>
+        void AssignMainSchedule(string text);
     }
 }

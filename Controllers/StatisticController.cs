@@ -6,12 +6,10 @@ using ScottPlot;
 using SportStats.Enums;
 using SportStats.Interfaces;
 using SportStats.Models;
-using System;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace SportStats.Controllers
 {
@@ -65,14 +63,14 @@ namespace SportStats.Controllers
                                     {
                                         Values = myStat_weight,
                                         color = Colors.Tomato,
-                                        Title = "weight",
+                                        Title = "Вес",
                                         Type = BarPlotTypes.Number
                                     });
                                     bars.Add(new PlotBarElem
                                     {
                                         Values = myStat_numOfRepetitions,
                                         color = Colors.LightBlue,
-                                        Title = "numOfRepetitions",
+                                        Title = "Количество повторений",
                                         Type = BarPlotTypes.Number
                                     });
 

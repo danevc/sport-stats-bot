@@ -63,11 +63,11 @@ namespace SportStats.Controllers
                             using (var db = new SportContext(_config))
                             {
                                 var maxCreatedOn = db.ExerciseReports
-                                    .Where(e => e.ExerciseId == curExercise.ExerciseId && e.Approach == approach && e.CreatedOn < DateTime.Today)
+                                    .Where(e => e.ExerciseId == curExercise.ExerciseId && e.Approach == 1 && e.CreatedOn < DateTime.Today)
                                     .Max(e => e.CreatedOn);
 
                                 var lastEx = db.ExerciseReports
-                                    .FirstOrDefault(e => e.ExerciseId == curExercise.ExerciseId && e.Approach == approach && e.CreatedOn == maxCreatedOn);
+                                    .FirstOrDefault(e => e.ExerciseId == curExercise.ExerciseId && e.Approach == approach && e.CreatedOn.Value.Date == maxCreatedOn.Value.Date);
 
                                 CacheHelper.SetCurrentApproach(_cache, _user.UserId, approach);
                                 var message = Utils.GetWorkoutStringMessage(approach, curExercise, lastEx);
@@ -132,15 +132,20 @@ namespace SportStats.Controllers
                                 }
 
                                 var maxCreatedOn = db.ExerciseReports
-                                    .Where(e => e.ExerciseId == exercise.ExerciseId && e.Approach == approach && e.CreatedOn < DateTime.Today)
+                                    .Where(e => e.ExerciseId == exercise.ExerciseId && e.Approach == 1 && e.CreatedOn < DateTime.Today)
                                     .Max(e => e.CreatedOn);
 
                                 var lastEx = db.ExerciseReports
-                                    .FirstOrDefault(e => e.ExerciseId == exercise.ExerciseId && e.Approach == approach && e.CreatedOn == maxCreatedOn);
+                                    .FirstOrDefault(e => e.ExerciseId == exercise.ExerciseId && e.Approach == approach && e.CreatedOn.Value.Date == maxCreatedOn.Value.Date);
+
+                                var bestEx = db.ExerciseReports
+                                    .Where(e => e.ExerciseId == exercise.ExerciseId)
+                                    .OrderByDescending(e => e.Weight)
+                                    .ThenByDescending(e => e.NumOfRepetitions).FirstOrDefault();
 
                                 CacheHelper.SetCurrentExercise(_cache, _user.UserId, exercise);
                                 CacheHelper.SetCurrentApproach(_cache, _user.UserId, approach);
-                                var message = Utils.GetWorkoutStringMessage(approach, exercise, lastEx);
+                                var message = Utils.GetWorkoutStringMessage(approach, exercise, lastEx, bestEx);
                                 await _bot.SendMessage(_chat.Id, 
                                     message,
                                     replyMarkup: new InlineKeyboardMarkup()

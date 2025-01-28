@@ -8,10 +8,8 @@ using SportStats;
 using Microsoft.Extensions.Caching.Memory;
 using Telegram.Bot.Types.ReplyMarkups;
 using SportStats.Models;
-using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using ScottPlot;
 
 var _config = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())
@@ -238,7 +236,8 @@ async Task OnUpdate(Telegram.Bot.Types.Update update)
                     CacheHelper.RemoveCurrentApproach(_cache, user.UserId);
 
                     await bot.AnswerCallbackQuery(query.Id);
-                    await bot.SendMessage(chatId,
+                    await bot.EditMessageText(chatId,
+                        query.Message.Id,
                         message,
                         replyMarkup: replyMarkup,
                         parseMode: ParseMode.Html);
@@ -259,32 +258,24 @@ async Task OnUpdate(Telegram.Bot.Types.Update update)
                     break;
 
                 case "EndWorkout":
-                    var workoutInDb = db.Workouts.FirstOrDefault(e => e.CreatedOn.Date == DateTime.Now.Date);
+                    var workoutInDb = db.Workouts.Include(e => e.ExerciseReports).FirstOrDefault(e => e.CreatedOn.Date == DateTime.Now.Date);
                     var workout = CacheHelper.GetCreateWorkout(_cache, user.UserId);
 
                     if(workout is not null && workout.ExerciseReports.Count != 0)
                     {
                         if (workoutInDb == null)
                         {
-                            workout.CreatedOn = new DateTime(2024, 12, 4);
+                            workout.CreatedOn = DateTime.Now;
                             db.Workouts.Add(workout);
                             db.SaveChanges();
                         }
                         else
                         {
-                            if(workoutInDb.TrainingDayId == workout.TrainingDayId)
-                            {
-                                workoutInDb.AverageHeartRate = workout.AverageHeartRate;
-                                workoutInDb.Calories += workout.Calories;
-                                workoutInDb.Duration += workout.Duration;
-                                workoutInDb.ExerciseReports.AddRange(workout.ExerciseReports);
-                                db.SaveChanges();
-                            }
-                            else
-                            {
-                                db.Workouts.Add(workout);
-                                db.SaveChanges();
-                            }
+                            workoutInDb.AverageHeartRate = (workoutInDb.AverageHeartRate + workout.AverageHeartRate) / 2;
+                            workoutInDb.Calories += workout.Calories;
+                            workoutInDb.Duration += workout.Duration;
+                            workoutInDb.ExerciseReports.AddRange(workout.ExerciseReports);
+                            db.SaveChanges();
                         }
                     }
                     _cache = new MemoryCache(new MemoryCacheOptions());
@@ -401,6 +392,21 @@ async Task OnUpdate(Telegram.Bot.Types.Update update)
                 #endregion
 
                 #region Настройки
+                case "AssignMainSchedule":
+                    await bot.AnswerCallbackQuery(query.Id);
+                    message = "Выбери основное расписание:\n";
+                    var schedules = db.Schedules.Where(e => e.UserId == user.UserId).OrderBy(e => e.CreatedOn).ToList();
+
+                    for (var i = 0; i < schedules.Count; i++)
+                    {
+                        message += $"<b>{i + 1}.</b> {schedules[i].ScheduleName}\n";
+                    }
+
+                    await bot.SendMessage(chatId,
+                      message, 
+                      parseMode: ParseMode.Html);
+                    UserStateManager.SetState(user.UserId, State.AssignMainSchedule, _cache);
+                    break;
                 case "AddExercises":
                     await bot.AnswerCallbackQuery(query.Id);
                     await bot.SendMessage(chatId,
@@ -476,7 +482,6 @@ async Task OnMessage(Message msg, UpdateType type)
 
         if (msg.From == null)
             throw new Exception("msg.from == null");
-
 
         var user = db.Users.FirstOrDefault(e => e.UserId == msg.From.Id);
         if (user == null)

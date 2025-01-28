@@ -61,7 +61,7 @@ namespace SportStats
             return null;
         }
 
-        public static string GetWorkoutStringMessage(int approach, Exercise curEx, ExerciseReport? lastEx)
+        public static string GetWorkoutStringMessage(int approach, Exercise curEx, ExerciseReport? lastEx, ExerciseReport? bestEx = null)
         {
             var _response = $"Упражнение: <b>{curEx.ExerciseName}</b>\nПодход: <b>#{approach}</b>\nПрошлое занятие: ";
 
@@ -76,6 +76,24 @@ namespace SportStats
             else if (lastEx?.Weight == null && lastEx?.NumOfRepetitions == null)
             {
                 _response += $"-";
+            }
+
+            if(bestEx is not null)
+            {
+                _response += "\nЛучший результат: ";
+
+                if (bestEx?.Weight != 0 && bestEx?.NumOfRepetitions != null)
+                {
+                    _response += $"<b>{bestEx.Weight}кг</b> на <b>{bestEx.NumOfRepetitions}</b> повторен{EndingDependsOfNum(bestEx.NumOfRepetitions)}.";
+                }
+                else if (bestEx?.Weight == 0 && bestEx?.NumOfRepetitions != null)
+                {
+                    _response += $"<b>{bestEx.NumOfRepetitions}</b> повторен{EndingDependsOfNum(bestEx.NumOfRepetitions)}.";
+                }
+                else if (bestEx?.Weight == null && bestEx?.NumOfRepetitions == null)
+                {
+                    _response += $"-";
+                }
             }
 
             return _response;
@@ -408,9 +426,9 @@ namespace SportStats
                 var coefficient = 0.0;
                 foreach (var exReport in w.ExerciseReports)
                 {
-                    coefficient += exReport.Weight != 0 ? exReport.Weight * exReport.NumOfRepetitions : exReport.NumOfRepetitions;
+                    coefficient += exReport.Weight != 0 ? exReport.Weight * exReport.NumOfRepetitions : exReport.NumOfRepetitions * 80;
                 }
-                coefficient = Math.Round(coefficient / 250, 2);
+                coefficient = Math.Round(coefficient / 350, 2);
                 coefBar.Add(coefficient);
 
                 var workoutDuration

@@ -11,7 +11,7 @@ using Telegram.Bot.Types.ReplyMarkups;
 
 namespace SportStats.Controllers
 {
-    public class MainController : BaseController, IMain 
+    public class MainController : BaseController, IMain
     {
         public MainController(Models.User user, ITelegramBotClient bot, Chat chat, IMemoryCache cache, Service service, IConfigurationRoot config) : base(user, bot, chat, cache, service, config) { }
 
@@ -98,7 +98,7 @@ namespace SportStats.Controllers
                         if (db.Schedules.Any(e => e.UserId == _user.UserId && e.ScheduleName == text))
                         {
                             await _bot.SendMessage(_chat.Id, "Такое расписание уже есть, напиши другое название",
-                                replyMarkup: new InlineKeyboardMarkup() 
+                                replyMarkup: new InlineKeyboardMarkup()
                                 .AddButton("Отменить создание расписания", "Main"));
                             return;
                         }
@@ -151,7 +151,7 @@ namespace SportStats.Controllers
                         };
 
                         CacheHelper.SetCreateTrainingDay(_cache, _user.UserId, trainingDay);
-                        if(sequenceNum == 1)
+                        if (sequenceNum == 1)
                         {
                             var message = $"Напиши дату, когда будет/был тренировочный день <b>«{trainingDay.TrainingDayName}»</b>\nПример: 24.03.2024";
                             await _bot.SendMessage(_chat.Id,
@@ -172,7 +172,7 @@ namespace SportStats.Controllers
                             message += Utils.GetStringExercises(exercises);
                             message += $"\n<b>Напиши номера через запятую. Если в списке нет нужного, то добавь новое упражнения начиная со *</b>";
 
-                            await _bot.SendMessage(_chat.Id, 
+                            await _bot.SendMessage(_chat.Id,
                                 message,
                                 replyMarkup: new InlineKeyboardMarkup()
                                 .AddButton("Отменить создание расписания", "Main"),
@@ -231,7 +231,7 @@ namespace SportStats.Controllers
                             var splitText = text.Replace(" ", "").Split(',');
                             var exercises = db.Exercises.Where(e => e.UserId == _user.UserId).OrderBy(e => e.CreatedOn).ToList();
 
-                            if (exercises is null)  throw new Exception("AddExercisesToTrainDay || exercises == null");
+                            if (exercises is null) throw new Exception("AddExercisesToTrainDay || exercises == null");
 
                             for (int i = 0; i < splitText.Length; i++)
                             {
@@ -336,7 +336,7 @@ namespace SportStats.Controllers
                 {
                     var dateFirstTrainDay = Utils.ParseDate(text);
 
-                    if(dateFirstTrainDay == null)
+                    if (dateFirstTrainDay == null)
                     {
                         await _bot.SendMessage(_chat.Id, $"Некорректные данные");
                         return;
@@ -430,6 +430,52 @@ namespace SportStats.Controllers
                                 .AddButton("Закончить", "Main"));
                             UserStateManager.SetState(_user.UserId, State.None, _cache);
                         }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                UserStateManager.SetState(_user.UserId, State.None, _cache);
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        public async void AssignMainSchedule(string text)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(text))
+                {
+                    if (int.TryParse(text, out int num))
+                    {
+                        using (var db = new SportContext(_config))
+                        {
+                            var schedules = db.Schedules.Where(e => e.UserId == _user.UserId).ToList();
+
+                            if (schedules is null)
+                                throw new Exception("ChooseExercise || exercises is null");
+
+                            schedules = schedules.OrderBy(e => e.CreatedOn).ToList();
+
+                            if (num - 1 <= schedules.Count)
+                            {
+                                var user = db.Users.FirstOrDefault(e => e.UserId == _user.UserId);
+                                user.CurrentScheduleId = schedules[num - 1].ScheduleId;
+                                var keyboard = ButtonsKit.GetBtnsInline(ButtonsInline.Start);
+                                await _bot.SendMessage(_chat.Id,
+                                    $"Расписание «{schedules[num - 1].ScheduleName}» назначено основным.",
+                                    replyMarkup: keyboard);
+                                UserStateManager.SetState(user.UserId, State.None, _cache);
+                            }
+                            else
+                            {
+                                await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        await _bot.SendMessage(_chat.Id, $"Данные введены некорректно");
                     }
                 }
             }
