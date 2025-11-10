@@ -10,6 +10,8 @@ using Telegram.Bot.Types.ReplyMarkups;
 using SportStats.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using System;
+using System.Globalization;
 
 var _config = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())
@@ -342,7 +344,7 @@ async Task OnUpdate(Telegram.Bot.Types.Update update)
                 case "WorkoutStats":
                     var workouts = db.Workouts
                                 .Include(e => e.ExerciseReports)
-                                .Where(e => e.CreatedOn >= DateTime.Now.AddMonths(-2) && e.UserId == user.UserId)
+                                .Where(e => e.UserId == user.UserId)
                                 .OrderBy(e => e.CreatedOn).ToList();
 
                     if (workouts is null)
@@ -388,6 +390,20 @@ async Task OnUpdate(Telegram.Bot.Types.Update update)
                         .AddButton("« Назад", "Back"),
                         parseMode: ParseMode.Html);
                     UserStateManager.SetState(user.UserId, State.TrainingDayStats, _cache);
+                    break;
+                case "BestScores":
+                    message = "";
+                    var exercises1 = db.Exercises.ToList();
+                    foreach (var ex in exercises1)
+                    {
+                        var bestEx = db.ExerciseReports
+                            .Where(e => e.ExerciseId == ex.ExerciseId)
+                            .OrderByDescending(e => e.Weight)
+                            .ThenByDescending(e => e.NumOfRepetitions).FirstOrDefault();
+                        message += ($"{ex.ExerciseName};{bestEx?.Weight};{bestEx?.NumOfRepetitions};{bestEx?.CreatedOn.Value.ToString("dd MMM yyyy", new CultureInfo("ru-RU"))}\n");
+                    }
+
+                    await bot.SendMessage(chatId, message, replyMarkup: new InlineKeyboardMarkup().AddButton("На главную", "Main"), parseMode: ParseMode.Html);
                     break;
                 #endregion
 

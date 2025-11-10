@@ -32,7 +32,8 @@ namespace SportStats.Enums
         AddCalories,
         AddDurationWorkout,
         TrainingDayStats,
-        AssignMainSchedule
+        AssignMainSchedule,
+        BestScores
     }
 
     public static class UserStateManager

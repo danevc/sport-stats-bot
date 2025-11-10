@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Azure;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
@@ -6,6 +7,7 @@ using ScottPlot;
 using SportStats.Enums;
 using SportStats.Interfaces;
 using SportStats.Models;
+using System.Text;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -37,7 +39,7 @@ namespace SportStats.Controllers
                                     throw new Exception("exercise is null");
 
                                 var reports = db.ExerciseReports
-                                    .Where(e => e.ExerciseId == exercise.ExerciseId && e.CreatedOn >= DateTime.Now.AddMonths(-2)).ToList();
+                                    .Where(e => e.ExerciseId == exercise.ExerciseId).ToList();
 
                                 if (reports != null)
                                 {
@@ -127,7 +129,7 @@ namespace SportStats.Controllers
 
                             var workouts = db.Workouts
                                 .Include(e => e.ExerciseReports)
-                                .Where(e => e.CreatedOn >= DateTime.Now.AddMonths(-2) && e.UserId == _user.UserId && e.TrainingDayId == trainingDay.TrainingDayId)
+                                .Where(e => e.UserId == _user.UserId && e.TrainingDayId == trainingDay.TrainingDayId)
                                 .OrderBy(e => e.CreatedOn).ToList();
 
                             if (workouts is null)

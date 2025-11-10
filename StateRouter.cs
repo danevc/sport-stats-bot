@@ -27,7 +27,7 @@ namespace SportStats
             { State.DoExercise, workoutController.DoExercise },
             { State.StatsChooseExercise, statisticController.StatsByExercise },
             { State.TrainingDayStats, statisticController.TrainingDayStats },
-            {State.AssignMainSchedule, mainController.AssignMainSchedule }
+            { State.AssignMainSchedule, mainController.AssignMainSchedule }
         };
         }
 

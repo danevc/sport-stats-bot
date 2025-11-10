@@ -41,6 +41,8 @@ namespace SportStats
                         .AddNewRow()
                         .AddButton("По тренировочным дням", "TrainingDayStats")
                         .AddNewRow()
+                        .AddButton("Лучшие результаты", "BestScores")
+                        .AddNewRow()
                         .AddButton("« Назад", "Back");
 
                 case ButtonsInline.Schedule:
